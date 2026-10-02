@@ -1,0 +1,15 @@
+data/
+.venv/
+__pycache__/
+*.pyc
+tests/scratch/
+.env
+*.sqlite3
+*.sqlite3-*
+*.log
+photos/
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.zip
