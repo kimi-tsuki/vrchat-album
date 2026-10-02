@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>使用指南 · VRChat 本地相册</title>
+<style>
+:root{font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;color:#eee9e1;background:#191918;color-scheme:dark}*{box-sizing:border-box}body{margin:0;line-height:1.8}main{max-width:850px;margin:auto;padding:38px 24px 60px}a{color:#e9a26f}h1{font-size:30px;margin:16px 0 8px}h2{font-size:20px;margin-top:30px}p,li{color:#bdb5aa}code{font-family:Consolas,monospace;font-size:.9em;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#242321;border:1px solid #3a3732;border-radius:10px;padding:16px;color:#eee9e1}.intro{color:#e9a26f}.card{border:1px solid #3a3732;background:#242321;border-radius:12px;padding:18px 22px;margin-top:20px}.card h2{margin-top:0}footer{margin-top:35px;border-top:1px solid #3a3732;padding-top:16px;font-size:13px;color:#8f877b}a:focus-visible{outline:2px solid #e9a26f;outline-offset:4px}
+</style>
+</head>
+<body><main>
+<a href="/">← 返回相册</a>
+<h1>把漫游的照片，收进自己的相册</h1>
+<p class="intro">照片、缩略图与整理记录保留在你的电脑上。启动窗口打开时，相册默认每 20 秒检查新照片。</p>
+<div class="card">
+<h2>第一次使用</h2>
+<ol>
+<li>从项目仓库下载源码 ZIP 并完整解压，安装 Python 3.10 或以上版本。</li>
+<li>在解压后的项目文件夹打开终端，运行 <code>python install.py</code>。Windows 也可使用 <code>py -3 install.py</code>；macOS / Linux 使用 <code>python3 install.py</code>。</li>
+<li>看到“Pillow OK”和“安装完成”后，Windows 双击 <code>打开相册.cmd</code>。首次扫描完成会自动打开浏览器。</li>
+<li>确认相册左侧显示的照片文件夹。默认是当前用户的 <code>Pictures\VRChat</code>，年月子目录也会扫描。</li>
+</ol>
+<p>首次安装需要联网下载依赖，之后浏览相册不需要云端服务。运行期间保留启动窗口。</p>
+</div>
+<h2>照片放在其他地方？</h2>
+<p>先停止已经运行的相册，在项目文件夹的终端中指定自己的照片目录。下面的路径需要换成你的实际路径；该设置只对这次启动生效。</p>
+<p>Windows：</p>
+<pre>.\打开相册.cmd --source "D:\VRChatPhotos"</pre>
+<p>macOS / Linux：</p>
+<pre>.venv/bin/python app.py --source "/你的/VRChat照片目录" --open-browser</pre>
+<p>如果 Windows 的图片目录被 OneDrive 重定向，也需要指定实际的 VRChat 照片目录。</p>
+<h2>先这样逛逛相册</h2>
+<ul>
+<li>左侧按世界或月份缩小范围；上方切换按世界、日期或游玩场次分组。</li>
+<li>搜索世界名、日期、文件名、标签或备注。搜索和当前筛选会一起生效。</li>
+<li>点击照片查看原图，用左右方向键翻页、Esc 关闭。世界名、标签和备注填写后需点击“保存这段回忆”。</li>
+<li>点击星标收藏照片，或用“选择”一次整理多张照片。</li>
+<li>只有照片包含相应元数据时才会自动识别世界；“未命名世界”和“未记录世界”可手动补充。</li>
+</ul>
+<h2>关闭、备份与更新</h2>
+<p>关闭网页后，启动窗口仍会继续扫描。按 Ctrl+C、关闭启动窗口或点网页里的“停止后台”来停止相册。</p>
+<p>备份前先停止相册，然后复制整个项目 <code>data/</code> 文件夹；若使用了 <code>--data</code>，备份实际指定的数据目录。它包含索引、缩略图、收藏与标注，原照片需要另行备份。网页导出的 JSON 可留档，但当前没有 JSON 导入还原功能。</p>
+<p>更新源码前先停止相册并备份数据目录。将新版本解压到新文件夹，把原 <code>data/</code> 复制过去，再运行安装命令并重新启动；使用自定义目录时，继续指定原来的 <code>--source</code> 和 <code>--data</code>。克隆仓库的用户可按 README 使用 <code>git pull --ff-only</code>。</p>
+<h2>找不到照片或打不开？</h2>
+<ul>
+<li><strong>缺少 Pillow：</strong>在项目目录重新运行安装命令，检查是否出现“安装完成”。</li>
+<li><strong>空相册：</strong>核对左侧目录、清空搜索与筛选，并确认照片已写入完成。支持 PNG、JPG、JPEG 和 WebP。</li>
+<li><strong>连接中断：</strong>检查启动窗口是否还在运行，重新启动后再打开 <code>http://127.0.0.1:18764</code>。</li>
+<li><strong>端口被占用：</strong>关闭之前的相册，或运行 <code>.\打开相册.cmd --port 18765</code> 并使用新端口。</li>
+<li><strong>安全软件拦截：</strong>先记录具体提示与文件名，在仓库提出问题以便检查。</li>
+</ul>
+<footer>
+完整安装与常见问题见项目 README.md。本项目是社区工具，与 VRChat 官方无关联。发布问题或截图前，请移除个人目录、照片、备注和其他不想公开的信息。
+</footer>
+</main></body>
+</html>
+
+

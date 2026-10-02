@@ -10,6 +10,7 @@ import mimetypes
 import os
 import re
 import sqlite3
+import sys
 import threading
 import time
 import webbrowser
@@ -19,7 +20,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from PIL import Image, ImageOps
+if sys.version_info < (3, 10):
+    raise SystemExit("需要 Python 3.10 或更高版本。请更新 Python 后运行 python install.py。")
+
+try:
+    from PIL import Image, ImageOps
+except ModuleNotFoundError as exc:
+    if exc.name != "PIL":
+        raise
+    print("缺少 Pillow。首次使用请先运行 python install.py（Windows 也可用 py -3 install.py），安装完成后再启动相册。", file=sys.stderr)
+    raise SystemExit(1)
 
 APP_ID = "vrchat-local-album-v1"
 DEFAULT_SOURCE = Path.home() / "Pictures" / "VRChat"
@@ -454,10 +464,10 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser(description="VRChat 本地相册")
-    parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE)
-    parser.add_argument("--data", type=Path, default=BASE / "data")
-    parser.add_argument("--port", type=int, default=18764)
-    parser.add_argument("--interval", type=int, default=20)
+    parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE, help="照片目录，默认当前用户 Pictures/VRChat")
+    parser.add_argument("--data", type=Path, default=BASE / "data", help="索引与缩略图目录，默认项目 data/，必须位于照片目录之外")
+    parser.add_argument("--port", type=int, default=18764, help="本机端口，默认 18764")
+    parser.add_argument("--interval", type=int, default=20, help="自动扫描间隔（秒），默认 20，最少 5")
     parser.add_argument("--open-browser", action="store_true", help="整理完成后打开浏览器")
     args = parser.parse_args()
     # Validate before creating directories or logs, including rejected startups.
@@ -486,7 +496,11 @@ def main():
                         format="%(asctime)s %(levelname)s %(message)s", encoding="utf-8")
     album = Album(args.source, args.data)
     # Only loopback: no LAN access and no public exposure.
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    except OSError as exc:
+        album.close()
+        parser.exit(1, f"无法在本机端口 {args.port} 启动相册：{exc}\n请关闭占用该端口的程序，或用 --port 指定其他端口。\n")
     server.daemon_threads = True
     server.album = album
     worker = threading.Thread(target=album.watch, args=(max(5, args.interval),), daemon=True)
