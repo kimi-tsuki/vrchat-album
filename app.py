@@ -24,6 +24,9 @@ from PIL import Image, ImageOps
 APP_ID = "vrchat-local-album-v1"
 DEFAULT_SOURCE = Path.home() / "Pictures" / "VRChat"
 BASE = Path(__file__).resolve().parent
+APP_VERSION = (BASE / "VERSION").read_text(encoding="utf-8").strip()
+if not re.fullmatch(r"\d+\.\d+\.\d+", APP_VERSION):
+    raise ValueError("VERSION 文件中的版本号无效。")
 EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 SHOT_DATE = re.compile(r"VRChat_(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})-(\d{2})(?:\.(\d+))?", re.I)
 PHOTO_ID = re.compile(r"^[a-f0-9]{64}$")
@@ -241,7 +244,7 @@ class Album:
         with self.lock:
             files = [dict(row) for row in self.db.execute("SELECT * FROM files ORDER BY date_quality DESC, path ASC")]
             records = {row["id"]: dict(row) for row in self.db.execute("SELECT * FROM photos")}
-            state = {"app": APP_ID, "source": str(self.source), "ready": self.ready,
+            state = {"app": APP_ID, "version": APP_VERSION, "source": str(self.source), "ready": self.ready,
                      "scanning": self.scanning, "error": self.error, "scan_errors": list(self.scan_errors),
                      "last_scan": self.last_scan, "processed": self.processed,
                      "discovered": self.discovered, "revision": self.revision}
