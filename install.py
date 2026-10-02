@@ -68,7 +68,7 @@ def install(base: Path = BASE) -> int:
         return 1
     print("\n安装完成。", flush=True)
     if os.name == "nt":
-        print("双击“打开相册.cmd”，首次整理结束后浏览器会打开相册。")
+        print("双击“打开相册.cmd”，浏览器会打开相册；在网页选择照片目录并查看整理进度。")
     else:
         print("启动：.venv/bin/python app.py --source \"/你的/VRChat照片目录\" --open-browser")
     print("相册运行期间保持启动窗口打开；使用说明见 README.md。")

@@ -4,12 +4,14 @@ from __future__ import annotations
 import argparse
 import hashlib
 import http.client
+import importlib.util
 import json
 import logging
 import mimetypes
 import os
 import re
 import sqlite3
+import subprocess
 import sys
 import threading
 import time
@@ -40,6 +42,73 @@ if not re.fullmatch(r"\d+\.\d+\.\d+", APP_VERSION):
 EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 SHOT_DATE = re.compile(r"VRChat_(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})-(\d{2})(?:\.(\d+))?", re.I)
 PHOTO_ID = re.compile(r"^[a-f0-9]{64}$")
+PICKER_LOCK = threading.Lock()
+
+
+def source_key(source: Path) -> str:
+    return os.path.normcase(str(source.resolve()))
+
+
+def read_saved_source(data: Path) -> Path | None:
+    database = data / "album.sqlite3"
+    if not database.is_file():
+        return None
+    connection = sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True)
+    try:
+        if not connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='settings'").fetchone():
+            return None
+        row = connection.execute("SELECT value FROM settings WHERE key='source'").fetchone()
+        if not row:
+            return None
+        path = Path(row[0])
+        if not path.is_absolute():
+            raise ValueError("保存的照片目录无效，请在网页重新选择。")
+        return path
+    finally:
+        connection.close()
+
+
+def has_legacy_index(data: Path) -> bool:
+    database = data / "album.sqlite3"
+    if not database.is_file():
+        return False
+    connection = sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True)
+    try:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(files)")}
+        return bool(columns and "source" not in columns and connection.execute("SELECT 1 FROM files LIMIT 1").fetchone())
+    finally:
+        connection.close()
+
+
+class PickerBusy(RuntimeError):
+    pass
+
+
+def picker_available() -> bool:
+    return importlib.util.find_spec("tkinter") is not None
+
+
+def pick_folder(initial: Path) -> str | None:
+    if not PICKER_LOCK.acquire(blocking=False):
+        raise PickerBusy("文件夹选择窗口已经打开，请在那个窗口完成选择或取消。")
+    try:
+        if not picker_available():
+            raise RuntimeError("这个 Python 没有文件夹选择组件，请在网页粘贴照片文件夹的完整路径。")
+        result = subprocess.run(
+            [sys.executable, str(BASE / "folder_picker.py"), "--initial", str(initial)],
+            capture_output=True, text=True, encoding="utf-8", timeout=180,
+        )
+        if result.returncode:
+            raise RuntimeError("无法打开系统文件夹窗口，请在网页粘贴照片文件夹的完整路径。")
+        value = json.loads(result.stdout)
+        path = value.get("path")
+        if path is not None and (not isinstance(path, str) or not path or len(path) > 32768):
+            raise ValueError("文件夹选择结果无效。")
+        return path
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError("文件夹窗口未能完成选择，请重试或在网页手动填写路径。") from exc
+    finally:
+        PICKER_LOCK.release()
 
 
 def world_metadata(metadata: dict) -> tuple[str, str]:
@@ -87,7 +156,7 @@ def photo_time(path: Path, metadata: dict, mtime: float) -> tuple[str, int]:
 
 
 class Album:
-    def __init__(self, source: Path, data: Path):
+    def __init__(self, source: Path, data: Path, configured: bool = True):
         self.source = source.resolve()
         self.data = data.resolve()
         if self.data == self.source or self.source in self.data.parents:
@@ -107,19 +176,48 @@ class Album:
                 note TEXT NOT NULL DEFAULT '', favorite INTEGER NOT NULL DEFAULT 0,
                 world_id TEXT NOT NULL DEFAULT '', world_custom INTEGER NOT NULL DEFAULT 0
             );
-            CREATE TABLE IF NOT EXISTS files (
-                path TEXT PRIMARY KEY, id TEXT NOT NULL, size INTEGER NOT NULL,
-                mtime_ns INTEGER NOT NULL, captured_at TEXT NOT NULL,
-                date_quality INTEGER NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS file_photo ON files(id);
+            CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         """)
+        file_columns = {row[1] for row in self.db.execute("PRAGMA table_info(files)")}
+        file_schema = """CREATE TABLE files (
+            source TEXT NOT NULL, path TEXT NOT NULL, id TEXT NOT NULL, size INTEGER NOT NULL,
+            mtime_ns INTEGER NOT NULL, captured_at TEXT NOT NULL, date_quality INTEGER NOT NULL,
+            PRIMARY KEY(source, path)
+        )"""
+        if file_columns and "source" not in file_columns:
+            # Legacy relative paths did not record their root. Re-read their
+            # contents once on upgrade instead of trusting a potentially wrong root.
+            try:
+                self.db.execute("BEGIN IMMEDIATE")
+                self.db.execute("ALTER TABLE files RENAME TO legacy_files")
+                self.db.execute("DROP INDEX IF EXISTS file_photo")
+                self.db.execute(file_schema)
+                # An old relative-path index does not identify its original
+                # directory. Keep it outside every real source until a user has
+                # explicitly supplied a source; no normal scan may prune it.
+                legacy_source = source_key(self.source) if configured else ""
+                self.db.execute("""INSERT INTO files(source,path,id,size,mtime_ns,captured_at,date_quality)
+                    SELECT ?,path,id,size,-1,captured_at,date_quality FROM legacy_files""", (legacy_source,))
+                self.db.execute("DROP TABLE legacy_files")
+                self.db.commit()
+            except Exception:
+                self.db.rollback()
+                self.db.close()
+                raise
+        elif not file_columns:
+            self.db.execute(file_schema)
+        self.db.execute("CREATE INDEX IF NOT EXISTS file_photo ON files(source,id)")
         columns = {row[1] for row in self.db.execute("PRAGMA table_info(photos)")}
         for column in ("world_id", "world_custom"):
             if column not in columns:
                 declaration = "TEXT NOT NULL DEFAULT ''" if column == "world_id" else "INTEGER NOT NULL DEFAULT 0"
                 self.db.execute(f"ALTER TABLE photos ADD COLUMN {column} {declaration}")
+        if configured:
+            self.db.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('source',?)", (str(self.source),))
         self.db.commit()
+        self.configured = configured
+        self.source_revision = 0
+        self.scan_phase = "idle"
         self.ready = False
         self.scanning = False
         self.error = None
@@ -130,6 +228,51 @@ class Album:
         self.revision = 0
         self.scan_event = threading.Event()
         self.stop_event = threading.Event()
+
+    def settings(self) -> dict:
+        with self.lock:
+            return {"configured": self.configured, "source": str(self.source),
+                    "source_exists": self.source.is_dir(), "default_source": str(DEFAULT_SOURCE),
+                    "picker_available": picker_available(), "source_revision": self.source_revision}
+
+    def configure_source(self, value: str) -> int:
+        if not isinstance(value, str) or not value.strip() or len(value) > 32768 or "\0" in value:
+            raise ValueError("请选择照片文件夹，或填写它的完整路径。")
+        candidate = Path(value.strip()).expanduser()
+        if not candidate.is_absolute():
+            raise ValueError("请填写完整的文件夹路径，例如 D:\\VRChatPhotos。")
+        candidate = candidate.resolve()
+        if self.data == candidate or candidate in self.data.parents:
+            raise ValueError("照片目录不能包含相册的数据目录，请选择原照片文件夹。")
+        if not candidate.is_dir():
+            raise ValueError("找不到这个照片文件夹，请检查路径或重新选择。")
+        try:
+            with os.scandir(candidate):
+                pass
+        except OSError as exc:
+            raise ValueError("无法读取这个文件夹，请选择当前用户有权读取的照片目录。") from exc
+        with self.lock:
+            if self.configured and candidate == self.source:
+                return self.source_revision
+            try:
+                self.db.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('source',?)", (str(candidate),))
+                self.db.commit()
+            except sqlite3.Error:
+                self.db.rollback()
+                raise
+            self.source = candidate
+            self.configured = True
+            self.source_revision += 1
+            self.revision += 1
+            self.ready = False
+            self.scanning = False
+            self.scan_phase = "idle"
+            self.error = None
+            self.scan_errors = []
+            self.last_scan = None
+            self.processed = self.discovered = 0
+            self.scan_event.set()
+            return self.source_revision
 
     def _read_photo(self, path: Path, stat) -> dict:
         # Read with normal read-only handles; a producer can still finish another photo.
@@ -175,29 +318,50 @@ class Album:
         if not self.scan_lock.acquire(blocking=False):
             return
         with self.lock:
+            if not self.configured:
+                self.scan_lock.release()
+                return
+            source = self.source
+            generation = self.source_revision
+            key = source_key(source)
             self.scanning = True
+            self.scan_phase = "discovering"
             self.processed = 0
+            self.discovered = 0
             self.scan_errors = []
+        def cancelled():
+            with self.lock:
+                return self.source_revision != generation or self.stop_event.is_set()
         try:
-            if not self.source.is_dir():
-                raise FileNotFoundError(f"找不到照片目录：{self.source}。已有索引已保留，请检查目录。")
+            if not source.is_dir():
+                raise FileNotFoundError(f"找不到照片目录：{source}。已有索引已保留，请检查目录。")
             paths = []
             walk_errors = []
-            for folder, dirs, names in os.walk(self.source, followlinks=False,
+            for folder, dirs, names in os.walk(source, followlinks=False,
                                                onerror=lambda err: walk_errors.append(err)):
+                if cancelled():
+                    return
                 dirs[:] = [name for name in dirs if not (Path(folder) / name).is_symlink()]
                 for name in names:
                     path = Path(folder) / name
                     if path.suffix.lower() in EXTENSIONS and not path.is_symlink():
                         paths.append(path)
+                with self.lock:
+                    if self.source_revision == generation:
+                        self.discovered = len(paths)
             with self.lock:
+                if self.source_revision != generation:
+                    return
                 self.discovered = len(paths)
-                cache = {row["path"]: dict(row) for row in self.db.execute("SELECT * FROM files")}
+                self.scan_phase = "processing"
+                cache = {row["path"]: dict(row) for row in self.db.execute("SELECT * FROM files WHERE source=?", (key,))}
             seen = set()
             errors = []
             changed = False
             for path in sorted(paths):
-                rel = str(path.relative_to(self.source))
+                if cancelled():
+                    return
+                rel = str(path.relative_to(source))
                 seen.add(rel)
                 try:
                     stat = path.stat()
@@ -209,28 +373,34 @@ class Album:
                         continue
                     item = self._read_photo(path, stat)
                     with self.lock:
+                        if self.source_revision != generation or self.stop_event.is_set():
+                            return
                         self.db.execute("INSERT OR IGNORE INTO photos(id, width, height,world,world_id) VALUES (?, ?, ?,?,?)",
                                         (item["id"], item["width"], item["height"], item["world"], item["world_id"]))
                         self.db.execute("UPDATE photos SET world=? WHERE id=? AND world='' AND world_custom=0",
                                         (item["world"], item["id"]))
                         self.db.execute("UPDATE photos SET world_id=? WHERE id=? AND world_id=''",
                                         (item["world_id"], item["id"]))
-                        self.db.execute("INSERT OR REPLACE INTO files(path,id,size,mtime_ns,captured_at,date_quality) VALUES(?,?,?,?,?,?)",
-                                        (rel, item["id"], stat.st_size, stat.st_mtime_ns,
+                        self.db.execute("INSERT OR REPLACE INTO files(source,path,id,size,mtime_ns,captured_at,date_quality) VALUES(?,?,?,?,?,?,?)",
+                                        (key, rel, item["id"], stat.st_size, stat.st_mtime_ns,
                                          item["captured_at"], item["date_quality"]))
                         self.db.commit()
+                        self.revision += 1
                         changed = True
                 except (OSError, ValueError, Image.DecompressionBombError) as exc:
                     errors.append({"file": rel, "message": str(exc)})
                     logging.warning("Cannot index %s: %s", rel, exc)
                 finally:
                     with self.lock:
-                        self.processed += 1
+                        if self.source_revision == generation:
+                            self.processed += 1
             with self.lock:
+                if self.source_revision != generation or self.stop_event.is_set():
+                    return
                 # A failed traversal may temporarily hide a whole folder; preserve its index.
                 if not walk_errors:
                     missing = set(cache) - seen
-                    self.db.executemany("DELETE FROM files WHERE path=?", ((path,) for path in missing))
+                    self.db.executemany("DELETE FROM files WHERE source=? AND path=?", ((key, path) for path in missing))
                     if missing:
                         changed = True
                     self.db.commit()
@@ -243,21 +413,37 @@ class Album:
         except Exception as exc:
             logging.exception("Scan failed")
             with self.lock:
-                self.error = str(exc)
-                self.ready = True
+                if self.source_revision == generation:
+                    self.error = str(exc)
+                    self.ready = True
         finally:
             with self.lock:
-                self.scanning = False
+                if self.source_revision == generation:
+                    self.scanning = False
+                    self.scan_phase = "idle"
             self.scan_lock.release()
+
+    def _state(self) -> dict:
+        counts = self.db.execute("SELECT count(*),count(DISTINCT id) FROM files WHERE source=?", (source_key(self.source),)).fetchone()
+        return {"app": APP_ID, "version": APP_VERSION, "source": str(self.source),
+                "data": str(self.data),
+                "configured": self.configured, "source_revision": self.source_revision,
+                "ready": self.ready, "scanning": self.scanning, "scan_phase": self.scan_phase,
+                "error": self.error, "scan_errors": list(self.scan_errors),
+                "last_scan": self.last_scan, "processed": self.processed,
+                "discovered": self.discovered, "revision": self.revision,
+                "total_files": counts[0], "duplicates": counts[0] - counts[1]}
+
+    def status(self) -> dict:
+        with self.lock:
+            return self._state()
 
     def catalog(self) -> dict:
         with self.lock:
-            files = [dict(row) for row in self.db.execute("SELECT * FROM files ORDER BY date_quality DESC, path ASC")]
-            records = {row["id"]: dict(row) for row in self.db.execute("SELECT * FROM photos")}
-            state = {"app": APP_ID, "version": APP_VERSION, "source": str(self.source), "ready": self.ready,
-                     "scanning": self.scanning, "error": self.error, "scan_errors": list(self.scan_errors),
-                     "last_scan": self.last_scan, "processed": self.processed,
-                     "discovered": self.discovered, "revision": self.revision}
+            key = source_key(self.source)
+            files = [dict(row) for row in self.db.execute("SELECT * FROM files WHERE source=? ORDER BY date_quality DESC, path ASC", (key,))]
+            records = {row["id"]: dict(row) for row in self.db.execute("SELECT * FROM photos WHERE id IN (SELECT id FROM files WHERE source=?)", (key,))}
+            state = self._state()
         photos = {}
         for file in files:
             digest = file["id"]
@@ -315,7 +501,7 @@ class Album:
             values.append(value)
         with self.lock:
             placeholders = ",".join("?" for _ in ids)
-            found = self.db.execute(f"SELECT count(*) FROM photos WHERE id IN ({placeholders})", ids).fetchone()[0]
+            found = self.db.execute(f"SELECT count(*) FROM photos WHERE id IN ({placeholders}) AND id IN (SELECT id FROM files WHERE source=?)", ids + [source_key(self.source)]).fetchone()[0]
             if found != len(set(ids)):
                 raise ValueError("部分照片不在相册索引中。")
             self.db.execute(f"UPDATE photos SET {','.join(fields)} WHERE id IN ({placeholders})", values + ids)
@@ -328,12 +514,17 @@ class Album:
         if not PHOTO_ID.fullmatch(digest):
             return None
         with self.lock:
-            rows = self.db.execute("SELECT path FROM files WHERE id=? ORDER BY date_quality DESC,path", (digest,)).fetchall()
+            source = self.source
+            rows = self.db.execute("SELECT path FROM files WHERE source=? AND id=? ORDER BY date_quality DESC,path", (source_key(source), digest)).fetchall()
         for row in rows:
-            candidate = (self.source / row["path"]).resolve()
-            if self.source in candidate.parents and candidate.is_file():
+            candidate = (source / row["path"]).resolve()
+            if source in candidate.parents and candidate.is_file():
                 return candidate
         return None
+
+    def contains(self, digest: str) -> bool:
+        with self.lock:
+            return bool(self.db.execute("SELECT 1 FROM files WHERE source=? AND id=? LIMIT 1", (source_key(self.source), digest)).fetchone())
 
     def watch(self, interval: int):
         while not self.stop_event.is_set():
@@ -394,10 +585,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         route = urlparse(self.path).path
         if route in ("/api/catalog", "/api/status"):
-            state = self.album.catalog()
-            if route == "/api/status":
-                state.pop("photos")
+            state = self.album.status() if route == "/api/status" else self.album.catalog()
             self.respond(200, state)
+        elif route == "/api/settings":
+            self.respond(200, self.album.settings())
         elif route == "/api/export":
             content = json.dumps(self.album.catalog(), ensure_ascii=False, indent=2).encode("utf-8")
             self.send_response(200)
@@ -408,7 +599,9 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(content)
         elif match := re.fullmatch(r"/api/photo/([a-f0-9]{64})/(thumb|original)", route):
             digest, kind = match.groups()
-            path = self.album.thumbs / f"{digest}.jpg" if kind == "thumb" else self.album.original(digest)
+            path = None
+            if self.album.contains(digest):
+                path = self.album.thumbs / f"{digest}.jpg" if kind == "thumb" else self.album.original(digest)
             if path and path.is_file():
                 self.send_file(path)
             else:
@@ -443,7 +636,17 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("请求太大。")
             body = json.loads(self.rfile.read(length) or b"{}")
             route = urlparse(self.path).path
-            if route == "/api/edit":
+            if route == "/api/settings/source":
+                if not isinstance(body, dict) or set(body) != {"source"}:
+                    raise ValueError("请选择照片目录。")
+                revision = self.album.configure_source(body["source"])
+                self.respond(200, {"ok": True, "source": str(self.album.source), "source_revision": revision})
+            elif route == "/api/pick-folder":
+                if not isinstance(body, dict) or body:
+                    raise ValueError("文件夹选择请求无效。")
+                path = pick_folder(self.album.source)
+                self.respond(200, {"path": path, "cancelled": path is None})
+            elif route == "/api/edit":
                 if not isinstance(body, dict):
                     raise ValueError("编辑格式无效。")
                 self.album.edit(body.get("ids"), {key: value for key, value in body.items() if key != "ids"})
@@ -460,19 +663,34 @@ class Handler(BaseHTTPRequestHandler):
                 self.respond(404, {"error": "没有这个操作。"})
         except (ValueError, TypeError) as exc:
             self.respond(400, {"error": str(exc)})
+        except PickerBusy as exc:
+            self.respond(409, {"error": str(exc)})
+        except RuntimeError as exc:
+            self.respond(503, {"error": str(exc)})
+        except sqlite3.Error:
+            self.respond(503, {"error": "无法保存设置，请检查相册数据目录是否可写，再重试。"})
 
 
 def main():
     parser = argparse.ArgumentParser(description="VRChat 本地相册")
-    parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE, help="照片目录，默认当前用户 Pictures/VRChat")
+    parser.add_argument("--source", type=Path, help="指定并记住照片目录；未指定时使用已保存目录，首次在网页选择")
     parser.add_argument("--data", type=Path, default=BASE / "data", help="索引与缩略图目录，默认项目 data/，必须位于照片目录之外")
     parser.add_argument("--port", type=int, default=18764, help="本机端口，默认 18764")
     parser.add_argument("--interval", type=int, default=20, help="自动扫描间隔（秒），默认 20，最少 5")
-    parser.add_argument("--open-browser", action="store_true", help="整理完成后打开浏览器")
+    parser.add_argument("--open-browser", action="store_true", help="启动后立即打开浏览器，选择照片目录并查看整理进度")
     args = parser.parse_args()
     # Validate before creating directories or logs, including rejected startups.
-    args.source = args.source.resolve()
     args.data = args.data.resolve()
+    explicit_source = args.source is not None
+    try:
+        saved_source = None if explicit_source else read_saved_source(args.data)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        saved_source = None
+    except (OSError, sqlite3.Error) as exc:
+        parser.exit(1, f"无法读取相册数据，请先备份数据目录再检查：{exc}\n")
+    configured = explicit_source or saved_source is not None
+    args.source = (args.source or saved_source or DEFAULT_SOURCE).resolve()
     if args.data == args.source or args.source in args.data.parents:
         parser.error("相册数据目录必须放在原照片目录之外。")
     if args.port:
@@ -481,7 +699,17 @@ def main():
             connection.request("GET", "/api/status")
             response = connection.getresponse()
             existing = json.loads(response.read()) if response.status == 200 else {}
-            if existing.get("app") == APP_ID and existing.get("source") == str(args.source.resolve()):
+            if existing.get("app") == APP_ID:
+                if existing.get("version") != APP_VERSION:
+                    parser.exit(1, "旧版本的相册仍在运行。请在原页面点击“停止后台”，然后重新打开相册。\n")
+                if existing.get("data") != str(args.data):
+                    parser.exit(1, "这个端口已用于另一个相册数据目录，请用 --port 指定其他端口。\n")
+                if explicit_source and (not existing.get("configured") or existing.get("source") != str(args.source)):
+                    connection.request("POST", "/api/settings/source", json.dumps({"source": str(args.source)}), {"Content-Type": "application/json"})
+                    update = connection.getresponse()
+                    result = json.loads(update.read())
+                    if update.status != 200:
+                        parser.exit(1, result.get("error", "无法更换照片目录。") + "\n")
                 url = f"http://127.0.0.1:{args.port}"
                 print(f"相册已经运行：{url}", flush=True)
                 if args.open_browser:
@@ -494,7 +722,7 @@ def main():
     args.data.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(filename=args.data / "service.log", level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s", encoding="utf-8")
-    album = Album(args.source, args.data)
+    album = Album(args.source, args.data, configured=configured)
     # Only loopback: no LAN access and no public exposure.
     try:
         server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
@@ -509,14 +737,10 @@ def main():
     state_path.write_text(json.dumps({"app": APP_ID, "pid": os.getpid(),
                                       "url": f"http://127.0.0.1:{server.server_port}"}), encoding="utf-8")
     url = f"http://127.0.0.1:{server.server_port}"
-    print(f"VRChat 本地相册：{url}\n照片目录：{album.source}\n每 {max(5, args.interval)} 秒自动检查新照片。关闭此窗口或按 Ctrl+C 停止。", flush=True)
+    hint = f"照片目录：{album.source}" if configured else "首次使用：在网页选择你的 VRChat 照片文件夹。"
+    print(f"VRChat 本地相册：{url}\n{hint}\n每 {max(5, args.interval)} 秒自动检查新照片。关闭此窗口或按 Ctrl+C 停止。", flush=True)
     if args.open_browser:
-        def open_when_ready():
-            while not album.ready and not album.stop_event.wait(0.25):
-                pass
-            if not album.stop_event.is_set():
-                webbrowser.open(url)
-        threading.Thread(target=open_when_ready, daemon=True).start()
+        webbrowser.open(url)
     try:
         server.serve_forever(poll_interval=0.25)
     except KeyboardInterrupt:

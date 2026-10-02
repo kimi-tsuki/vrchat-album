@@ -11,24 +11,29 @@
 <body><main>
 <a href="/">← 返回相册</a>
 <h1>把漫游的照片，收进自己的相册</h1>
-<p class="intro">照片、缩略图与整理记录保留在你的电脑上。启动窗口打开时，相册默认每 20 秒检查新照片。</p>
+<p class="intro">照片、缩略图与整理记录保留在你的电脑上。选好照片文件夹后，启动窗口打开时，相册默认每 20 秒检查新照片。</p>
 <div class="card">
-<h2>第一次使用</h2>
+<h2>Windows：第一次打开相册</h2>
 <ol>
-<li>从项目仓库下载源码 ZIP 并完整解压，安装 Python 3.10 或以上版本。</li>
-<li>在解压后的项目文件夹打开终端，运行 <code>python install.py</code>。Windows 也可使用 <code>py -3 install.py</code>；macOS / Linux 使用 <code>python3 install.py</code>。</li>
-<li>看到“Pillow OK”和“安装完成”后，Windows 双击 <code>打开相册.cmd</code>。首次扫描完成会自动打开浏览器。</li>
-<li>确认相册左侧显示的照片文件夹。默认是当前用户的 <code>Pictures\VRChat</code>，年月子目录也会扫描。</li>
+<li>打开 <a href="https://github.com/kimi-tsuki/vrchat-album" target="_blank" rel="noopener">项目仓库</a>，点 <strong>Code → Download ZIP</strong>，下载后完整解压。无需安装 Git。</li>
+<li>在解压后的文件夹双击 <code>打开相册.cmd</code>。它会检查 Python、准备本地运行环境和依赖，然后打开网页。</li>
+<li>如果提示未找到 Python，先从 <a href="https://www.python.org/downloads/" target="_blank" rel="noopener">Python 官方网站</a>安装 Python 3.10 或以上版本（建议 3.12 或以上），再双击启动文件。启动窗口会显示下一步操作。</li>
+<li>首次打开网页，确认建议的照片文件夹，或点<strong>“选择其他文件夹”</strong>，选好后点<strong>“开始整理”</strong>。</li>
 </ol>
-<p>首次安装需要联网下载依赖，之后浏览相册不需要云端服务。运行期间保留启动窗口。</p>
+<p>首次安装需要联网下载依赖，之后浏览相册不需要云端服务。请先解压，不能在 ZIP 里面直接启动；运行期间保留启动窗口。以后仍双击同一个 <code>打开相册.cmd</code>，已安装的环境会直接复用。</p>
 </div>
 <h2>照片放在其他地方？</h2>
-<p>先停止已经运行的相册，在项目文件夹的终端中指定自己的照片目录。下面的路径需要换成你的实际路径；该设置只对这次启动生效。</p>
-<p>Windows：</p>
-<pre>.\打开相册.cmd --source "D:\VRChatPhotos"</pre>
-<p>macOS / Linux：</p>
-<pre>.venv/bin/python app.py --source "/你的/VRChat照片目录" --open-browser</pre>
-<p>如果 Windows 的图片目录被 OneDrive 重定向，也需要指定实际的 VRChat 照片目录。</p>
+<p>默认建议当前用户的 <code>Pictures\VRChat</code>。照片存放在其他磁盘、OneDrive 或自定义文件夹时，请选择实际的 VRChat 照片文件夹；其中的年月子目录也会扫描。</p>
+<ol>
+<li>首次使用，点“选择其他文件夹”；已经打开相册时，点左侧底部<strong>“更换照片文件夹”</strong>，窄屏中在标题下方点<strong>“更换目录”</strong>。</li>
+<li>在这台电脑的文件夹选择窗口中选中照片目录。窗口可能在浏览器后面。点取消会保留当前目录。</li>
+<li>检查网页显示的待用路径，点击<strong>“开始整理”</strong>或<strong>“确认并开始整理”</strong>，才会真正应用这个目录。</li>
+</ol>
+<p>选择窗口打不开时，展开“手动填写文件夹路径”，从资源管理器地址栏复制完整路径，例如 <code>D:\VRChatPhotos</code>。浏览器中的选择按钮会打开相册后台的本机选择窗口，不会上传文件。</p>
+<p>确认后的目录会保存在本机，下次启动会继续使用。更换目录会清除当前搜索、筛选和选图状态；未保存的标注请先保存。标注和星标跟随同一张照片保留，切回原目录仍能继续回看。</p>
+<h2>第一次整理会发生什么？</h2>
+<p>相册先查找所选文件夹和子目录里的照片，再读取照片信息、合并完全相同的副本并准备缩略图。网页会显示当前阶段和处理数量；文件较多时需要一点时间，可以保持网页打开等待。</p>
+<p>整理完成后，如果这个目录没有支持的照片，网页会明确显示空相册，可以直接选择另一个目录。支持 PNG、JPG、JPEG 和 WebP。原照片始终留在原位，合并只影响相册显示。</p>
 <h2>先这样逛逛相册</h2>
 <ul>
 <li>左侧按世界或月份缩小范围；上方切换按世界、日期或游玩场次分组。</li>
@@ -40,17 +45,31 @@
 <h2>关闭、备份与更新</h2>
 <p>关闭网页后，启动窗口仍会继续扫描。按 Ctrl+C、关闭启动窗口或点网页里的“停止后台”来停止相册。</p>
 <p>备份前先停止相册，然后复制整个项目 <code>data/</code> 文件夹；若使用了 <code>--data</code>，备份实际指定的数据目录。它包含索引、缩略图、收藏与标注，原照片需要另行备份。网页导出的 JSON 可留档，但当前没有 JSON 导入还原功能。</p>
-<p>更新源码前先停止相册并备份数据目录。将新版本解压到新文件夹，把原 <code>data/</code> 复制过去，再运行安装命令并重新启动；使用自定义目录时，继续指定原来的 <code>--source</code> 和 <code>--data</code>。克隆仓库的用户可按 README 使用 <code>git pull --ff-only</code>。</p>
+<p>更新源码前先停止相册并备份数据目录。将新版本解压到新文件夹，把原 <code>data/</code> 复制过去，再双击 <code>打开相册.cmd</code>。保存的目录、星标与标注会保留；若使用 <code>--data</code>，继续指定原数据目录。不要复制旧 <code>.venv/</code>，新位置会重新准备运行环境。克隆仓库的用户可按 README 使用 <code>git pull --ff-only</code>。</p>
+<p>从 0.1.1 升级时，第一次需要在欢迎页确认原照片目录，也可以沿用原来的 <code>--source</code> 参数。旧版没有保存目录；未确认来源的旧索引会保留，确认后重新读取照片并沿用已有星标和标注。</p>
+<h2>macOS / Linux 与手动安装</h2>
+<p>安装 Python 3.10 或以上版本，完整解压源码后，在项目文件夹的终端运行：</p>
+<pre>python3 install.py
+.venv/bin/python app.py --open-browser</pre>
+<p>网页首次使用和更换目录的流程相同。没有桌面文件夹选择窗口的环境，使用网页中的完整路径输入即可。</p>
+<p>Windows 如需手动安装，可在项目文件夹的终端运行 <code>python install.py</code> 或 <code>py -3 install.py</code>。随后运行 <code>.\打开相册.cmd</code>。</p>
+<p>进阶用法：从终端指定 <code>--source</code> 也会保存为以后使用的照片目录，下次直接双击启动文件会沿用。先停止已运行的相册，再执行：</p>
+<pre>Windows：
+.\打开相册.cmd --source "D:\VRChatPhotos"
+
+macOS / Linux：
+.venv/bin/python app.py --source "/你的/VRChat照片目录" --open-browser</pre>
 <h2>找不到照片或打不开？</h2>
 <ul>
-<li><strong>缺少 Pillow：</strong>在项目目录重新运行安装命令，检查是否出现“安装完成”。</li>
-<li><strong>空相册：</strong>核对左侧目录、清空搜索与筛选，并确认照片已写入完成。支持 PNG、JPG、JPEG 和 WebP。</li>
+<li><strong>首次安装失败：</strong>查看启动窗口的提示，确认已安装 Python，并能联网下载依赖。重新双击启动文件可以重试；也可运行上面的手动安装命令。</li>
+<li><strong>选择目录失败：</strong>确认路径存在且可以读取，或使用“手动填写文件夹路径”。选择器取消不会更改相册。</li>
+<li><strong>空相册：</strong>核对网页中的目录、清空搜索与筛选，并确认照片已写入完成。空文件夹可以保存，之后拍下的照片会自动出现。</li>
 <li><strong>连接中断：</strong>检查启动窗口是否还在运行，重新启动后再打开 <code>http://127.0.0.1:18764</code>。</li>
 <li><strong>端口被占用：</strong>关闭之前的相册，或运行 <code>.\打开相册.cmd --port 18765</code> 并使用新端口。</li>
 <li><strong>安全软件拦截：</strong>先记录具体提示与文件名，在仓库提出问题以便检查。</li>
 </ul>
 <footer>
-完整安装与常见问题见项目 README.md。本项目是社区工具，与 VRChat 官方无关联。发布问题或截图前，请移除个人目录、照片、备注和其他不想公开的信息。
+漫游相册 v0.2.0 · 完整安装与常见问题见项目 README.md。本项目是社区工具，与 VRChat 官方无关联。发布问题或截图前，请移除个人目录、照片、备注和其他不想公开的信息。
 </footer>
 </main></body>
 </html>

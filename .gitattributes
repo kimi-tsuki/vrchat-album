@@ -1,0 +1,2 @@
+# Windows CMD parses this UTF-8 launcher with CRLF. Keep the ZIP and checkout bytes identical.
+*.cmd -text whitespace=cr-at-eol
