@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { albumApi, type AlbumApi } from './api';
-import { buildCollections, dateNumber, localDateKey, scopeGroup, scopePhotos } from './collections';
+import { customCards, buildCollections, dateNumber, localDateKey, scopeGroup, scopePhotos } from './collections';
 import {
   catalogError, createDraft, EMPTY_FIELDS, EMPTY_FILTERS, fieldsFrom,
   filterPhotos, groupPhotos, orderPhotos, sidebarModel, sortPhotos, tagsFrom,
@@ -314,7 +314,8 @@ export class AlbumController {
       ...(followsToday && this.state.view === 'memories' ? { limit: 180, selected: new Set(), selectMode: false } : {}) });
   };
   private visiblePhotos() {
-    return orderPhotos(filterPhotos(scopePhotos(this.state.photos, this.state), this.state.filters), scopeGroup(this.state));
+    const photos = filterPhotos(scopePhotos(this.state.photos, this.state), this.state.filters);
+    return this.state.collection?.rule.kind === 'custom' ? photos : orderPhotos(photos, scopeGroup(this.state));
   }
   clearFilters = (): void => this.update({ filters: { ...EMPTY_FILTERS }, limit: 180 });
   private setFilters(patch: Partial<AlbumState['filters']>): void {
@@ -661,11 +662,11 @@ export function useAlbum(options: AlbumOptions = {}) {
   const scoped = useMemo(() => scopePhotos(state.photos, state), [state.photos, state.view, state.collection, state.memoryDate, state.memoryRange, state.today]);
   const galleryGroup = scopeGroup(state);
   const filtered = useMemo(
-    () => orderPhotos(filterPhotos(scoped, state.filters), galleryGroup),
-    [scoped, state.filters, galleryGroup],
+    () => state.collection?.rule.kind === 'custom' ? filterPhotos(scoped, state.filters) : orderPhotos(filterPhotos(scoped, state.filters), galleryGroup),
+    [scoped, state.filters, galleryGroup, state.collection],
   );
   const groups = useMemo(() => groupPhotos(filtered, galleryGroup, state.limit), [filtered, galleryGroup, state.limit]);
-  const collections = useMemo(() => buildCollections(state.photos, state.today), [state.photos, state.today]);
+  const collections = useMemo(() => [...customCards(state.photos, state.catalog?.custom_collections || []), ...buildCollections(state.photos, state.today)], [state.photos, state.today, state.catalog?.custom_collections]);
   const sidebar = useMemo(() => sidebarModel(state.photos), [state.photos]);
   const viewerId = state.viewer?.id;
   const viewerSnapshot = state.viewer?.photo;

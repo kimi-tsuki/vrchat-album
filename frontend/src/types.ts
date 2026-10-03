@@ -3,10 +3,15 @@ export type BrowseMode = 'worlds' | 'months';
 export type LibraryView = 'photos' | 'memories' | 'collections';
 export type MemoryRange = 'day' | 'month';
 export type CollectionRule =
+  | { kind: 'custom'; value: CustomCollection }
   | { kind: 'favorites' | 'recent' | 'notes' | 'unwritten' }
   | { kind: 'session' | 'world' | 'tag' | 'year'; value: string };
 export interface CollectionSelection { rule: CollectionRule; title: string; description: string }
 
+export interface CustomCollection {
+  id: string; revision: number; name: string; mode: 'manual' | 'rules'; ids: string[]; cover: string;
+  rules: { from: string; to: string; world: string; tags: string[]; favorites: boolean };
+}
 export interface Photo {
   id: string;
   filename: string;
@@ -54,6 +59,7 @@ export interface AlbumStatus {
 }
 
 export interface AlbumCatalog extends AlbumStatus {
+  custom_collections?: CustomCollection[];
   photos: Photo[];
 }
 

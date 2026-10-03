@@ -346,3 +346,13 @@ h1 { font-size: 30px; line-height: 1.35; font-weight: 600; letter-spacing: .02em
 
 .album-viewer-root { display:flex; flex-direction:column; flex:1; min-height:0; height:100%; background:var(--bg); }
 .album-viewer-root:fullscreen .viewer-side { display:none; }
+
+.album-native-field { display:flex; flex-direction:column; gap:8px; font-size:12px; }
+.album-native-field :is(input,select) { width:100%; padding:10px; background:var(--field-bg); color:var(--text); border:1px solid var(--border); border-radius:8px; }
+.album-rule-dates { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.album-members { display:flex; flex-direction:column; gap:8px; }
+.album-member { display:flex; flex-wrap:wrap; align-items:center; gap:7px; padding:8px; border:1px solid var(--border); border-radius:10px; }
+.album-member img { width:60px; height:45px; object-fit:cover; border-radius:6px; }
+.album-member > span { flex:1; min-width:100px; font-size:12px; overflow-wrap:anywhere; }
+.album-member small { display:block; color:var(--quiet); font-size:10px; }
+@media(max-width:700px) { .batch-bar { flex-wrap:wrap; width:calc(100vw - 24px); gap:7px; } }

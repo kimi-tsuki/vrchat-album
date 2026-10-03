@@ -155,7 +155,10 @@ def photo_time(path: Path, metadata: dict, mtime: float) -> tuple[str, int]:
     return datetime.fromtimestamp(mtime).isoformat(timespec="seconds"), 1
 
 
-class Album:
+from library_features import LibraryFeatures
+
+
+class Album(LibraryFeatures):
     def __init__(self, source: Path, data: Path, configured: bool = True):
         self.source = source.resolve()
         self.data = data.resolve()
@@ -214,6 +217,7 @@ class Album:
                 self.db.execute(f"ALTER TABLE photos ADD COLUMN {column} {declaration}")
         if configured:
             self.db.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('source',?)", (str(self.source),))
+        self.initialize_library()
         self.db.commit()
         self.configured = configured
         self.source_revision = 0
@@ -444,6 +448,7 @@ class Album:
             files = [dict(row) for row in self.db.execute("SELECT * FROM files WHERE source=? ORDER BY date_quality DESC, path ASC", (key,))]
             records = {row["id"]: dict(row) for row in self.db.execute("SELECT * FROM photos WHERE id IN (SELECT id FROM files WHERE source=?)", (key,))}
             state = self._state()
+            state["custom_collections"] = self.collection_list()
         photos = {}
         for file in files:
             digest = file["id"]
@@ -662,6 +667,8 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("编辑格式无效。")
                 self.album.edit(body.get("ids"), {key: value for key, value in body.items() if key != "ids"})
                 self.respond(200, {"ok": True})
+            elif route == "/api/collections/save":
+                self.respond(200, {"collection": self.album.save_collection(body)})
             elif route == "/api/scan":
                 self.album.scan_event.set()
                 self.respond(202, {"ok": True})

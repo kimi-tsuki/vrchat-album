@@ -82,3 +82,16 @@ describe('automatic collection rules', () => {
     expect(scopePhotos([photo('a')], { view: 'collections', collection: { title: '空合集', description: '', rule: { kind: 'tag', value: 'missing' } }, today: '2026-10-03', memoryDate: '2026-10-03', memoryRange: 'day' })).toEqual([]);
   });
 });
+
+import { customMembers, customCards } from './collections';
+import type { CustomCollection } from './types';
+it('intersects custom rules and preserves manual ordering and covers', () => {
+  const a = photo('a', '2026-10-03', { tags:['Friends','landscape'], favorite:true, date:'2026-10-03' });
+  const b = photo('b', '2026-10-03', { tags:['friends'], favorite:true, date:'2026-10-03' });
+  const c: CustomCollection = {id:'c',revision:1,name:'c',mode:'rules',ids:['b','a'],cover:'a',rules:{from:'2026-01-01',to:'2026-12-31',world:'',tags:['friends','LANDSCAPE'],favorites:true}};
+  expect(customMembers([a,b],c).map(p=>p.id)).toEqual(['a']);
+  c.mode='manual';
+  expect(customMembers([a,b],c).map(p=>p.id)).toEqual(['b','a']);
+  expect(customCards([a,b],[c])[0].covers[0].id).toBe('a');
+  expect(customMembers([],c)).toEqual([]);
+});

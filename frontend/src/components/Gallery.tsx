@@ -9,6 +9,7 @@ import { useEntrance } from '../motion';
 
 export interface GalleryProps {
   photos: Photo[];
+  preserveOrder?: boolean;
   allPhotos?: Photo[];
   limit: number;
   group: GroupMode;
@@ -125,8 +126,8 @@ function PhotoGrid({ photos, layout, selected, selectMode, onOpen, onSelect, onF
   </div>;
 }
 
-export function Gallery({ photos, allPhotos = photos, limit, group, layout, selected, selectMode, onOpen, onSelect, onFavorite, onBatch, onMore }: GalleryProps) {
-  const groups = useMemo(() => groupPhotos(photos, group, limit), [photos, group, limit]);
+export function Gallery({ preserveOrder, photos, allPhotos = photos, limit, group, layout, selected, selectMode, onOpen, onSelect, onFavorite, onBatch, onMore }: GalleryProps) {
+  const groups = useMemo(() => preserveOrder ? [{key:'custom',title:'合集照片',meta:'自定顺序',count:photos.length,photos:photos.slice(0,limit)}] : groupPhotos(photos, group, limit), [photos, group, limit, preserveOrder]);
   const remaining = Math.max(0, photos.length - limit);
   return <div id="gallery" className={`gallery${selectMode ? ' selection-enabled' : ''}`}>
     {groups.map((section) => <section className="group" key={section.key}>

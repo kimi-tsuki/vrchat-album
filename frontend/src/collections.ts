@@ -1,5 +1,5 @@
 import { sortPhotos, worldKey, worldName } from './model';
-import type { AlbumState, CollectionRule, CollectionSelection, GroupMode, MemoryRange, Photo } from './types';
+import type { AlbumState, CollectionRule, CollectionSelection, GroupMode, MemoryRange, Photo, CustomCollection } from './types';
 
 const DAY = 86_400_000;
 export function localDateKey(now = new Date()): string {
@@ -25,6 +25,7 @@ export function memoryPhotos(photos: readonly Photo[], date: string, range: Memo
 }
 const normalizedTag = (tag: string) => tag.trim().toLocaleLowerCase();
 export function collectionPhotos(photos: readonly Photo[], rule: CollectionRule, today: string): Photo[] {
+  if (rule.kind === 'custom') return customMembers(photos, rule.value);
   const end = dateNumber(today);
   return photos.filter(photo => {
     switch (rule.kind) {
@@ -51,7 +52,7 @@ export function scopePhotos(photos: readonly Photo[], scope: DiscoveryScope): Ph
 export const scopeGroup = (scope: Pick<AlbumState, 'view' | 'group'>): GroupMode => scope.view === 'memories' ? 'date' : scope.group;
 export interface SmartCollection extends CollectionSelection {
   id: string;
-  category: '推荐' | '世界' | '标签' | '年份';
+  category: '推荐' | '世界' | '标签' | '年份' | '自定义';
   count: number;
   covers: Photo[];
   favorites: number;
@@ -106,4 +107,19 @@ export function buildCollections(photos: readonly Photo[], today: string): Smart
       '年份', { kind: 'year', value: year }, members);
   }
   return result;
+}
+
+export function customMembers(photos: readonly Photo[], c: CustomCollection): Photo[] {
+  const byId = new Map(photos.map(p => [p.id, p]));
+  if (c.mode === 'manual') return c.ids.flatMap(id => byId.has(id) ? [byId.get(id)!] : []);
+  return sortPhotos(photos.filter(p => (!c.rules.from || p.date >= c.rules.from) && (!c.rules.to || p.date <= c.rules.to) &&
+    (!c.rules.world || worldKey(p) === c.rules.world) && (!c.rules.favorites || p.favorite) &&
+    c.rules.tags.every(tag => p.tags.some(t => normalizedTag(t) === normalizedTag(tag)))));
+}
+export function customCards(photos: readonly Photo[], collections: CustomCollection[]): SmartCollection[] {
+  return collections.map(c => {
+    const members = customMembers(photos, c); const cover = members.find(p => p.id === c.cover);
+    return { id: c.id, category: '自定义', title: c.name, description: c.mode === 'manual' ? '手选照片 · 自定顺序' : '组合规则 · 自动收集', rule: { kind: 'custom', value: c },
+      count: members.length, covers: (cover ? [cover, ...members.filter(p => p.id !== cover.id)] : members).slice(0, 3), favorites: members.filter(p => p.favorite).length, sessions: new Set(members.map(p => p.session_id)).size };
+  });
 }

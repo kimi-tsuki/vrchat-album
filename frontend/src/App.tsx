@@ -14,10 +14,12 @@ import { Setup, SourceForm } from './components/SourceForm';
 import { DraftActions, Viewer } from './components/Viewer';
 import { Collections, MemoryControls } from './components/Discover';
 import { useEntrance } from './motion';
+import { CollectionEditor } from './components/CustomCollections';
+import type { CustomCollection } from './types';
 
 const repository = 'https://github.com/kimi-tsuki/vrchat-album';
 const groupOptions: { id: GroupMode; label: string }[] = [{id:'world',label:'世界'},{id:'date',label:'日期'},{id:'session',label:'场次'}];
-const viewOptions: { id: LibraryView; label: string }[] = [{id:'photos',label:'相册'},{id:'memories',label:'那年今日'},{id:'collections',label:'自动合集'}];
+const viewOptions: { id: LibraryView; label: string }[] = [{id:'photos',label:'相册'},{id:'memories',label:'那年今日'},{id:'collections',label:'合集'}];
 
 function ModeTabs<T extends string>({ options, selected, onChange, label, className = '' }: {
   options: { id: T; label: string }[]; selected: T; onChange(value: T): void; label: string; className?: string;
@@ -57,7 +59,7 @@ function EmptyGallery({ album }: { album: AlbumHook }) {
     label = album.memoryRange === 'day' ? '看看往年这个月' : '回到相册';
     action = album.memoryRange === 'day' ? () => album.setMemoryRange('month') : () => album.setView('photos');
   } else if (album.collection) {
-    title = '这册暂时没有照片'; detail = '标注或照片变化后，合集会自动更新。可以看看其他合集。'; label = '返回自动合集'; action = () => album.setView('collections');
+    title = '这册暂时没有照片'; detail = '标注或照片变化后，合集会自动更新。可以看看其他合集。'; label = '返回合集'; action = () => album.setView('collections');
   }
   return <div className="empty"><Icon name="album" /><h2>{title}</h2><p>{detail}</p><Button variant="secondary" onPress={() => { action(); }}>{label}</Button></div>;
 }
@@ -65,6 +67,7 @@ function EmptyGallery({ album }: { album: AlbumHook }) {
 export function App() {
   const prefs = usePreferences();
   const album = useAlbum({ initialGroup: prefs.preferences.group, initialBrowse: prefs.preferences.browse });
+  const [collectionEdit, setCollectionEdit] = useState<CustomCollection | null | undefined>(undefined);
   const [appearance, setAppearance] = useState(false);
   const [stop, setStop] = useState(false);
   const [stopBusy, setStopBusy] = useState(false);
@@ -112,15 +115,16 @@ export function App() {
       <div className="stats"><div className="stat"><strong>{c?.ready ? album.sidebar.total : '—'}</strong><span>漫游瞬间</span></div><div className="stat"><strong>{c?.ready ? album.sidebar.worldCount : '—'}</strong><span>留下足迹的世界</span></div><div className="stat"><strong>{album.sidebar.latestDate.replaceAll('-',' / ') || '等待整理'}</strong><span>最近的回忆</span></div></div>
       <div ref={contentRef} className="album-content">
       {album.view === 'memories' && <MemoryControls album={album} />}
-      {album.view === 'collections' && album.collection && <div className="collection-detail"><Button size="sm" variant="outline" onPress={() => album.setView('collections')}><Icon name="left" />返回自动合集</Button><p>{album.collection.description} · 这册共 {album.scoped.length} 张照片</p></div>}
+      {album.view === 'collections' && album.collection && <div className="collection-detail"><Button size="sm" variant="outline" onPress={() => album.setView('collections')}><Icon name="left" />返回合集</Button><p>{album.collection.description} · 这册共 {album.scoped.length} 张照片</p>{album.collection.rule.kind === 'custom' && <Button variant="secondary" size="sm" onPress={()=>setCollectionEdit(album.collection?.rule.kind === 'custom' ? album.collection.rule.value : null)}>编辑合集</Button>}</div>}
       {!collectionIndex && <div className="toolbar"><TextField aria-label="搜索照片" value={album.filters.search} onChange={album.setSearch} className="search-field"><div className="search-input-wrap"><Icon name="search" /><Input placeholder="搜索世界、日期、标签或回忆…" />{album.filters.search && <Button isIconOnly size="sm" variant="ghost" className="search-clear" aria-label="清空搜索" onPress={() => album.setSearch('')}><Icon name="close" /></Button>}</div></TextField><div className="toolbar-right">{album.view !== 'memories' && <><span className="group-label">分组</span><ModeTabs options={groupOptions} selected={album.group} onChange={setGroup} label="照片分组" className="group-tabs" /></>}<Button size="sm" variant="outline" onPress={album.randomPhoto} isDisabled={!album.filtered.length || album.selectMode}><Icon name="shuffle" />随便看看</Button><Button variant={album.selectMode ? 'secondary' : 'outline'} onPress={album.toggleSelectMode}><Icon name="check" />{album.selectMode ? '完成选择' : '选择'}</Button></div></div>}
       <div className="sync-line"><span className={`sync-dot${c?.scanning ? ' scanning' : ''}`} /><span>{syncText}</span>{album.hasFilters && <Button variant="ghost" size="sm" onPress={album.clearFilters}>清除筛选</Button>}</div><ScanProgress album={album} />
-      {collectionIndex ? c?.ready ? <Collections album={album} /> : !c?.scanning && <div className="empty"><Spinner /><p>正在准备合集…</p></div> : album.filtered.length ? <Gallery photos={album.filtered} allPhotos={album.photos} limit={album.limit} group={album.galleryGroup} layout={prefs.preferences.layout} selected={album.selected} selectMode={album.selectMode} onOpen={photo => album.openViewer(photo.id)} onSelect={photo => album.toggleSelected(photo.id)} onFavorite={photo => { void album.toggleFavorite(photo.id); }} onBatch={ids => { const session = album.photos.find(photo => photo.id === ids[0])?.session_id; if (session) void album.openSession(session); }} onMore={album.loadMore} /> : c?.ready ? <EmptyGallery album={album} /> : !c?.scanning && <div className="empty"><Spinner /><p>正在准备相册…</p></div>}
+      {collectionIndex ? c?.ready ? <><Button variant="secondary" onPress={() => setCollectionEdit(null)}>新建自定义合集</Button><Collections album={album} /></> : !c?.scanning && <div className="empty"><Spinner /><p>正在准备合集…</p></div> : album.filtered.length ? <Gallery preserveOrder={album.collection?.rule.kind === 'custom'} photos={album.filtered} allPhotos={album.photos} limit={album.limit} group={album.galleryGroup} layout={prefs.preferences.layout} selected={album.selected} selectMode={album.selectMode} onOpen={photo => album.openViewer(photo.id)} onSelect={photo => album.toggleSelected(photo.id)} onFavorite={photo => { void album.toggleFavorite(photo.id); }} onBatch={ids => { const session = album.photos.find(photo => photo.id === ids[0])?.session_id; if (session) void album.openSession(session); }} onMore={album.loadMore} /> : c?.ready ? <EmptyGallery album={album} /> : !c?.scanning && <div className="empty"><Spinner /><p>正在准备相册…</p></div>}
       </div>
     </>}
     <footer className="page-footer"><span>{!!c?.duplicates && `${c.duplicates} 张完全相同的照片已合并显示 · `}所有原文件均保留{c?.version && ` · v${c.version}`}</span><div className="project-links"><a href={repository} target="_blank" rel="noopener noreferrer"><Icon name="github" />GitHub 项目</a><a href={repository} target="_blank" rel="noopener noreferrer" title="打开仓库后登录 GitHub，点击 Star 支持项目"><Icon name="star" />Star on GitHub</a><Button variant="ghost" size="sm" onPress={() => setStop(true)} isDisabled={album.stopped}>停止后台</Button></div></footer><p className="project-hint">喜欢这个相册？前往 GitHub 仓库并点击 Star 支持项目。</p>
     </main>
-    {album.selectMode && <div className="batch-bar"><span className="batch-count">已选 <strong>{album.selected.size}</strong> 张</span><Button variant="ghost" size="sm" onPress={album.selectFiltered}>全选筛选结果</Button><Button variant="ghost" size="sm" onPress={album.clearSelection}>取消选择</Button><Button size="sm" onPress={() => album.openBatch([...album.selected])} isDisabled={!album.selected.size}><Icon name="edit" />批量整理</Button></div>}
+    {album.selectMode && <div className="batch-bar"><Button size="sm" variant="secondary" isDisabled={!album.selected.size} onPress={()=>setCollectionEdit(null)}>选图建合集</Button><span className="batch-count">已选 <strong>{album.selected.size}</strong> 张</span><Button variant="ghost" size="sm" onPress={album.selectFiltered}>全选筛选结果</Button><Button variant="ghost" size="sm" onPress={album.clearSelection}>取消选择</Button><Button size="sm" onPress={() => album.openBatch([...album.selected])} isDisabled={!album.selected.size}><Icon name="edit" />批量整理</Button></div>}
+    {collectionEdit !== undefined && <CollectionEditor album={album} initial={collectionEdit || undefined} onClose={()=>setCollectionEdit(undefined)}/> }
     <Viewer album={album} />
     <Dialog isOpen={!!album.batch} onClose={() => { album.closeBatch(); }} title="为这些照片，留下共同的回忆" description={`为${album.batch?.label || '选中的照片'}（${album.batch?.ids.length || 0} 张）填写共同信息。留空的项目保持原样。`} isBusy={album.batch?.saving} footer={<><Button variant="ghost" onPress={() => { album.closeBatch(); }} isDisabled={album.pendingSourceChange || album.batch?.saving}>取消</Button><Button type="submit" form="batch-edit-form" isPending={album.batch?.saving} isDisabled={album.pendingSourceChange}>保存整理</Button></>}>
       {album.batch && <><form id="batch-edit-form" className="field-stack" onSubmit={event => { event.preventDefault(); void album.saveBatch(); }}><Field label="共同的世界名称" value={album.batch.fields.world} onChange={world => album.updateBatch({world})} maxLength={200} isDisabled={album.batch.saving} /><Field label="共同的标签" value={album.batch.fields.tagsText} onChange={tagsText => album.updateBatch({tagsText})} description="用逗号分隔；填写后替换这些照片的标签" isDisabled={album.batch.saving} /><Field label="共同的备注" value={album.batch.fields.note} onChange={note => album.updateBatch({note})} multiline maxLength={4000} isDisabled={album.batch.saving} /></form>{album.batch.error && <p className="form-message error" role="alert">{album.batch.error}</p>}<DraftActions album={album} /></>}

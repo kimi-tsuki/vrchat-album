@@ -21,7 +21,7 @@ export function MemoryControls({ album }: { album: AlbumHook }) {
   </section>;
 }
 
-const categories = ['全部', '推荐', '世界', '标签', '年份'] as const;
+const categories = ['全部', '自定义', '推荐', '世界', '标签', '年份'] as const;
 type Category = typeof categories[number];
 export function Collections({ album }: { album: AlbumHook }) {
   const [query, setQuery] = useState('');
