@@ -92,7 +92,132 @@
   --photo-accent: #9bd9ff;
 }
 
+:root[data-theme="glass"] {
+  color-scheme: dark;
+  --bg: #101d25;
+  --sidebar: #10222bd6;
+  --panel: #19333ef0;
+  --panel2: #264650d9;
+  --border: #789ca44d;
+  --border-hover: #91d0cb;
+  --text: #eefafa;
+  --muted: #b4d1d0;
+  --quiet: #91b6b4;
+  --accent: #a5ece2;
+  --accent-bg: #3867628f;
+  --accent-text: #123330;
+  --accent-hover: #c1f8ef;
+  --red: #ffb7bd;
+  --notice-bg: #233e44e8;
+  --notice-border: #678d91;
+  --notice-text: #c7e4df;
+  --error-bg: #422f3be8;
+  --error-border: #9b667a;
+  --field-bg: #102b35d9;
+  --viewer-stage: #0c1921;
+  --viewer-info: #18323de8;
+  --album-backdrop: #0a1723f2;
+  --modal-overlay: #06111bbb;
+  --shadow: #020e1766;
+  --success: #a1dfc9;
+  --photo-accent: #b6fff1;
+  --album-radius: 1rem;
+  --album-field-radius: .85rem;
+  --album-button-radius: 12px;
+  --album-photo-radius: 18px;
+  --album-photo-border: #c4fff01f;
+  --album-background: radial-gradient(ellipse at 85% 0%, #6856954d, transparent 55%), radial-gradient(ellipse at 15% 70%, #348b8252, transparent 60%);
+  --album-panel-shadow: 0 14px 42px #020e174d, inset 0 1px #efffff14;
+  --album-photo-shadow: 0 8px 24px #020e1740;
+}
+
+:root[data-theme="mist-purple"] {
+  color-scheme: dark;
+  --bg: #211b2c;
+  --sidebar: #261f34;
+  --panel: #332a44;
+  --panel2: #443553;
+  --border: #594568;
+  --border-hover: #baa0d5;
+  --text: #f1ebfa;
+  --muted: #cec0e0;
+  --quiet: #b7a4c9;
+  --accent: #d8b9ff;
+  --accent-bg: #513d6d;
+  --accent-text: #2a183f;
+  --accent-hover: #e5ceff;
+  --red: #ffc1d3;
+  --notice-bg: #3d304a;
+  --notice-border: #806191;
+  --notice-text: #ddc8ec;
+  --error-bg: #482c43;
+  --error-border: #a46b87;
+  --field-bg: #2b223a;
+  --viewer-stage: #191322;
+  --viewer-info: #2e253d;
+  --album-backdrop: #171020f2;
+  --modal-overlay: #160e24bd;
+  --shadow: #13092466;
+  --success: #b7d9be;
+  --photo-accent: #e4c9ff;
+  --album-radius: 1rem;
+  --album-field-radius: 1rem;
+  --album-button-radius: 16px;
+  --album-photo-radius: 16px;
+  --album-photo-border: #d8b9ff1a;
+  --album-background: radial-gradient(ellipse at 90% 0%, #72519142, transparent 55%), radial-gradient(ellipse at 30% 100%, #63457126, transparent 60%);
+  --album-panel-shadow: 0 14px 40px #160d2745;
+  --album-photo-shadow: 0 7px 20px #180d2938;
+}
+
+:root[data-theme="monochrome"] {
+  color-scheme: light;
+  --bg: #f6f6f6;
+  --sidebar: #ffffff;
+  --panel: #ffffff;
+  --panel2: #eaeaea;
+  --border: #d2d2d2;
+  --border-hover: #545454;
+  --text: #171717;
+  --muted: #535353;
+  --quiet: #636363;
+  --accent: #1b1b1b;
+  --accent-bg: #e6e6e6;
+  --accent-text: #ffffff;
+  --accent-hover: #393939;
+  --red: #a22e43;
+  --notice-bg: #eeeeee;
+  --notice-border: #b8b8b8;
+  --notice-text: #3e3e3e;
+  --error-bg: #f5e9ed;
+  --error-border: #c98d9d;
+  --field-bg: #ffffff;
+  --viewer-stage: #e5e5e5;
+  --viewer-info: #ffffff;
+  --album-backdrop: #e1e1e1f5;
+  --modal-overlay: #17171770;
+  --shadow: #1717171f;
+  --success: #426b4a;
+  --photo-accent: #ffffff;
+  --album-radius: .25rem;
+  --album-field-radius: .25rem;
+  --album-button-radius: 5px;
+  --album-photo-radius: 3px;
+  --album-photo-border: #d2d2d2;
+  --album-background: none;
+  --album-panel-shadow: none;
+  --album-photo-shadow: none;
+}
+
 :root {
+  --album-radius: .7rem;
+  --album-field-radius: .7rem;
+  --album-button-radius: 24px;
+  --album-photo-radius: 12px;
+  --album-photo-border: transparent;
+  --album-background: none;
+  --album-panel-shadow: none;
+  --album-photo-shadow: none;
   /* Image controls keep a dark scrim so they remain readable over any photo. */
   --photo-overlay: #171615b8;
   --photo-overlay-border: #ffffff40;

@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react';
 
 export const preferenceKey = 'vrchat-album-view-preferences';
-export const themes = ['warm-dark', 'paper-light', 'cool-blue'] as const;
+export const themeOptions = [
+  { value: 'warm-dark', title: '暖黑', detail: '柔和暖色，熟悉的相册', colorScheme: 'dark' },
+  { value: 'paper-light', title: '纸白', detail: '明亮纸色，轻松浏览', colorScheme: 'light' },
+  { value: 'cool-blue', title: '冷蓝', detail: '深蓝底色，清爽安静', colorScheme: 'dark' },
+  { value: 'glass', title: '玻璃风', detail: '半透明面板，轻盈通透', colorScheme: 'dark' },
+  { value: 'mist-purple', title: '雾紫', detail: '柔紫雾色，圆润柔和', colorScheme: 'dark' },
+  { value: 'monochrome', title: '极简黑白', detail: '清晰线条，干净利落', colorScheme: 'light' },
+] as const;
+export const themes = themeOptions.map(option => option.value);
 export const layouts = ['grid', 'masonry', 'justified'] as const;
 export type Theme = typeof themes[number];
 export type Layout = typeof layouts[number];
@@ -26,10 +34,11 @@ export function readPreferences(): Preferences {
 }
 
 export function applyAppearance(prefs: Preferences) {
+  const { colorScheme } = themeOptions.find(option => option.value === prefs.theme) ?? themeOptions[0];
   document.documentElement.dataset.theme = prefs.theme;
   document.documentElement.dataset.layout = prefs.layout;
-  document.documentElement.classList.toggle('dark', prefs.theme !== 'paper-light');
-  document.documentElement.style.colorScheme = prefs.theme === 'paper-light' ? 'light' : 'dark';
+  document.documentElement.classList.toggle('dark', colorScheme === 'dark');
+  document.documentElement.style.colorScheme = colorScheme;
 }
 
 export function usePreferences() {
