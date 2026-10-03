@@ -1,0 +1,100 @@
+:root,
+:root[data-theme="warm-dark"] {
+  color-scheme: dark;
+  --bg: #191918;
+  --sidebar: #151514;
+  --panel: #242321;
+  --panel2: #2c2a27;
+  --border: #3a3732;
+  --border-hover: #766756;
+  --text: #eee9e1;
+  --muted: #b5ada1;
+  --quiet: #a39a8d;
+  --accent: #e9a26f;
+  --accent-bg: #3c2c21;
+  --accent-text: #25190f;
+  --accent-hover: #f3b485;
+  --red: #edafa1;
+  --notice-bg: #2c241d;
+  --notice-border: #584638;
+  --notice-text: #cfb6a0;
+  --error-bg: #2d211e;
+  --error-border: #66453b;
+  --field-bg: #272521;
+  --viewer-stage: #111110;
+  --viewer-info: #1e1d1b;
+  --overlay: #0d0c0bec;
+  --modal-overlay: #0d0c0bbb;
+  --shadow: #0005;
+  --success: #99b294;
+  --photo-accent: #ffc28f;
+}
+
+:root[data-theme="paper-light"] {
+  color-scheme: light;
+  --bg: #f4f1eb;
+  --sidebar: #ebe6de;
+  --panel: #fffdf8;
+  --panel2: #eae4da;
+  --border: #d8d0c3;
+  --border-hover: #9d8d79;
+  --text: #292c29;
+  --muted: #62645e;
+  --quiet: #727369;
+  --accent: #a34e23;
+  --accent-bg: #f1e2d4;
+  --accent-text: #fffaf5;
+  --accent-hover: #88411e;
+  --red: #a43f32;
+  --notice-bg: #faf0dc;
+  --notice-border: #d9bf88;
+  --notice-text: #765425;
+  --error-bg: #f9e7e2;
+  --error-border: #dca99d;
+  --field-bg: #f7f4ee;
+  --viewer-stage: #e8e5de;
+  --viewer-info: #fffdf8;
+  --overlay: #e8e5def5;
+  --modal-overlay: #292c296e;
+  --shadow: #292c2933;
+  --success: #4a7148;
+  --photo-accent: #ffc28f;
+}
+
+:root[data-theme="cool-blue"] {
+  color-scheme: dark;
+  --bg: #101923;
+  --sidebar: #0d151f;
+  --panel: #182431;
+  --panel2: #223244;
+  --border: #31465b;
+  --border-hover: #7196b6;
+  --text: #e5edf5;
+  --muted: #aabed0;
+  --quiet: #8fa5ba;
+  --accent: #8ac5ee;
+  --accent-bg: #20394f;
+  --accent-text: #102638;
+  --accent-hover: #afdafa;
+  --red: #efafa7;
+  --notice-bg: #202e3d;
+  --notice-border: #4b6681;
+  --notice-text: #bfd2e3;
+  --error-bg: #322831;
+  --error-border: #805867;
+  --field-bg: #14212e;
+  --viewer-stage: #0b131d;
+  --viewer-info: #14202d;
+  --overlay: #080f18f2;
+  --modal-overlay: #080f18c4;
+  --shadow: #0005;
+  --success: #97c4b3;
+  --photo-accent: #9bd9ff;
+}
+
+:root {
+  /* Image controls keep a dark scrim so they remain readable over any photo. */
+  --photo-overlay: #171615b8;
+  --photo-overlay-border: #ffffff40;
+  --photo-overlay-text: #f5f2ed;
+}

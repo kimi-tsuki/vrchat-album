@@ -4,8 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>使用指南 · VRChat 本地相册</title>
+<link rel="stylesheet" href="/web/themes.css?v=0.3.0">
+<script src="/web/theme-preferences.js?v=0.3.0"></script>
 <style>
-:root{font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;color:#eee9e1;background:#191918;color-scheme:dark}*{box-sizing:border-box}body{margin:0;line-height:1.8}main{max-width:850px;margin:auto;padding:38px 24px 60px}a{color:#e9a26f}h1{font-size:30px;margin:16px 0 8px}h2{font-size:20px;margin-top:30px}p,li{color:#bdb5aa}code{font-family:Consolas,monospace;font-size:.9em;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#242321;border:1px solid #3a3732;border-radius:10px;padding:16px;color:#eee9e1}.intro{color:#e9a26f}.card{border:1px solid #3a3732;background:#242321;border-radius:12px;padding:18px 22px;margin-top:20px}.card h2{margin-top:0}footer{margin-top:35px;border-top:1px solid #3a3732;padding-top:16px;font-size:13px;color:#8f877b}a:focus-visible{outline:2px solid #e9a26f;outline-offset:4px}
+:root{font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;color:var(--text);background:var(--bg)}*{box-sizing:border-box}body{margin:0;line-height:1.8}main{max-width:850px;margin:auto;padding:38px 24px 60px}a{color:var(--accent)}h1{font-size:30px;margin:16px 0 8px}h2{font-size:20px;margin-top:30px}p,li{color:var(--muted)}code{font-family:Consolas,monospace;font-size:.9em;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px;color:var(--text)}.intro{color:var(--accent)}.card{border:1px solid var(--border);background:var(--panel);border-radius:12px;padding:18px 22px;margin-top:20px}.card h2{margin-top:0}footer{margin-top:35px;border-top:1px solid var(--border);padding-top:16px;font-size:13px;color:var(--muted)}a:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
 </style>
 </head>
 <body><main>
@@ -42,6 +44,13 @@
 <li>点击星标收藏照片，或用“选择”一次整理多张照片。</li>
 <li>只有照片包含相应元数据时才会自动识别世界；“未命名世界”和“未记录世界”可手动补充。</li>
 </ul>
+<h2>换一种相册外观</h2>
+<p>点击相册顶部的<strong>“外观”</strong>，分别选择配色和照片布局，选择后立即生效。</p>
+<ul>
+<li><strong>配色：</strong>暖黑、纸白和冷蓝。使用指南会跟随相册配色。</li>
+<li><strong>布局：</strong>整齐网格、自然比例瀑布流和横排照片墙。布局可以与任意配色组合。</li>
+</ul>
+<p>选择只保存在当前浏览器中，刷新或重新打开相册时会继续使用。收藏、标签、备注和分组浏览不受影响，也不需要重新扫描照片；清除浏览器网站数据后会恢复默认的暖黑配色和整齐网格。</p>
 <h2>关闭、备份与更新</h2>
 <p>关闭网页后，启动窗口仍会继续扫描。按 Ctrl+C、关闭启动窗口或点网页里的“停止后台”来停止相册。</p>
 <p>备份前先停止相册，然后复制整个项目 <code>data/</code> 文件夹；若使用了 <code>--data</code>，备份实际指定的数据目录。它包含索引、缩略图、收藏与标注，原照片需要另行备份。网页导出的 JSON 可留档，但当前没有 JSON 导入还原功能。</p>
@@ -69,7 +78,7 @@ macOS / Linux：
 <li><strong>安全软件拦截：</strong>先记录具体提示与文件名，在仓库提出问题以便检查。</li>
 </ul>
 <footer>
-漫游相册 v0.2.1 · 完整安装与常见问题见项目 README.md。本项目是社区工具，与 VRChat 官方无关联。发布问题或截图前，请移除个人目录、照片、备注和其他不想公开的信息。
+漫游相册 v0.3.0 · 完整安装与常见问题见项目 README.md。本项目是社区工具，与 VRChat 官方无关联。发布问题或截图前，请移除个人目录、照片、备注和其他不想公开的信息。
 </footer>
 </main></body>
 </html>
