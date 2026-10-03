@@ -7,12 +7,142 @@ from datetime import date, datetime
 from PIL import Image, ImageStat
 
 
+def annotation_values(changes):
+    if not isinstance(changes, dict) or not changes or set(changes) - {'world', 'tags', 'note', 'favorite'}:
+        raise ValueError('编辑字段无效。')
+    result = {}
+    for key, value in changes.items():
+        if key in ('world', 'note'):
+            if not isinstance(value, str) or len(value) > (200 if key == 'world' else 4000):
+                raise ValueError('世界名或备注太长。')
+            result[key] = value.strip()
+        elif key == 'tags':
+            if not isinstance(value, list) or len(value) > 30 or any(not isinstance(t, str) or len(t) > 80 for t in value):
+                raise ValueError('标签格式无效。')
+            result[key] = json.dumps(list(dict.fromkeys(t.strip() for t in value if t.strip())), ensure_ascii=False)
+        else:
+            if not isinstance(value, bool):
+                raise ValueError('收藏状态无效。')
+            result[key] = int(value)
+    return result
+
+
 class LibraryFeatures:
     def initialize_library(self):
         self.db.execute("""CREATE TABLE IF NOT EXISTS collections (
             source TEXT NOT NULL, id TEXT NOT NULL, revision INTEGER NOT NULL,
             document TEXT NOT NULL, PRIMARY KEY(source,id))""")
         self.db.execute("CREATE TABLE IF NOT EXISTS visual_signatures (id TEXT PRIMARY KEY, hash TEXT NOT NULL, color TEXT NOT NULL)")
+        self.db.execute("""CREATE TABLE IF NOT EXISTS edit_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT NOT NULL, created TEXT NOT NULL,
+            label TEXT NOT NULL, before TEXT NOT NULL, after TEXT NOT NULL, undone INTEGER NOT NULL DEFAULT 0)""")
+
+    def annotation_snapshot(self, ids):
+        # Chunk IN queries to support large recovery files on older SQLite builds.
+        result = {}
+        for start in range(0, len(ids), 500):
+            chunk = ids[start:start+500]
+            if chunk:
+                for row in self.db.execute(f"SELECT id,world,world_custom,tags,note,favorite FROM photos WHERE id IN ({','.join('?' for _ in chunk)})", chunk):
+                    result[row['id']] = {k:row[k] for k in ('world','world_custom','tags','note','favorite')}
+        return result
+
+    def record_edit(self, before, after, label):
+        if before == after:
+            return
+        source = os.path.normcase(str(self.source))
+        self.db.execute('INSERT INTO edit_history(source,created,label,before,after) VALUES(?,?,?,?,?)',
+                        (source,datetime.now().isoformat(timespec='seconds'),label,json.dumps(before),json.dumps(after)))
+        self.db.execute('DELETE FROM edit_history WHERE source=? AND id NOT IN (SELECT id FROM edit_history WHERE source=? ORDER BY id DESC LIMIT 50)', (source,source))
+
+    def history(self):
+        with self.lock:
+            rows = self.db.execute('SELECT id,created,label,before,undone FROM edit_history WHERE source=? ORDER BY id DESC LIMIT 50', (os.path.normcase(str(self.source)),))
+            return {'source_revision':self.source_revision, 'entries':[{'id':r['id'],'created':r['created'],'label':r['label'],'count':len(json.loads(r['before'])),'undone':bool(r['undone'])} for r in rows]}
+
+    def undo_edit(self, body):
+        with self.lock, self.db:
+            if not isinstance(body, dict) or body.get('source_revision') != self.source_revision:
+                raise ValueError('照片目录已更换，请重新打开整理记录。')
+            row = self.db.execute('SELECT * FROM edit_history WHERE source=? AND undone=0 ORDER BY id DESC LIMIT 1', (os.path.normcase(str(self.source)),)).fetchone()
+            if not row or body.get('id') != row['id']:
+                raise ValueError('请先撤销最近的一次整理，或刷新操作记录。')
+            before, after = json.loads(row['before']), json.loads(row['after'])
+            if self.annotation_snapshot(list(after)) != after or any(not self.contains(i) for i in before):
+                raise ValueError('这些照片或标注已发生变化，未覆盖后续记录。请重新检查。')
+            for identifier, fields in before.items():
+                self.db.execute(f"UPDATE photos SET {','.join(k+'=?' for k in fields)} WHERE id=?", list(fields.values())+[identifier])
+            self.db.execute('UPDATE edit_history SET undone=1 WHERE id=?', (row['id'],))
+            self.revision += 1
+
+    def export_annotations(self):
+        with self.lock:
+            photos = []
+            for identifier, fields in self.annotation_snapshot([p['id'] for p in self.catalog()['photos']]).items():
+                item = {'id':identifier,'tags':json.loads(fields['tags']),'note':fields['note'],'favorite':bool(fields['favorite'])}
+                if fields['world_custom']:
+                    item['world'] = fields['world']
+                photos.append(item)
+            return {'format':'vrchat-album-annotations','format_version':1,'exported_at':datetime.now().isoformat(timespec='seconds'),'photos':photos}
+
+    def _import_plan(self, body):
+        document = body.get('document')
+        mode = body.get('mode')
+        if mode not in ('fill', 'restore') or not isinstance(document, dict):
+            raise ValueError('请选择有效的 JSON 记录与恢复方式。')
+        fmt = document.get('format')
+        if fmt not in ('vrchat-album-annotations','vrchat-album-annotation-draft') and document.get('app') != 'vrchat-local-album-v1':
+            raise ValueError('这个文件不是相册导出的整理记录或标注草稿。')
+        if fmt and document.get('format_version') != 1:
+            raise ValueError('不支持这个记录格式版本。')
+        rows = document.get('photos')
+        if not isinstance(rows, list) or not rows or len(rows) > 20000:
+            raise ValueError('记录应包含 1 至 20000 张照片。超过时请备份完整 data 目录。')
+        incoming = {}
+        for row in rows:
+            if not isinstance(row,dict) or not isinstance(row.get('id'),str) or not re.fullmatch(r'[a-f0-9]{64}',row['id']) or row['id'] in incoming:
+                raise ValueError('记录包含无效或重复的照片编号。')
+            if fmt == 'vrchat-album-annotation-draft':
+                fields = document.get('fields')
+                if not isinstance(fields, dict) or not isinstance(fields.get('tags_text'),str):
+                    raise ValueError('草稿字段无效。')
+                changes = {'world':fields.get('world'),'note':fields.get('note'),'tags':re.split(r'[,，;；\n]',fields['tags_text'])}
+                if document.get('mode') == 'batch':
+                    changes = {k:v for k,v in changes.items() if (any(t.strip() for t in v) if k=='tags' else v)}
+            else:
+                changes = {k:v for k,v in row.items() if k in ('world','tags','note','favorite')}
+            incoming[row['id']] = annotation_values(changes) if changes else {}
+        current_ids = {p['id'] for p in self.catalog()['photos']}
+        matched = [i for i in incoming if i in current_ids]
+        before = self.annotation_snapshot(matched)
+        updates = {}
+        for identifier in matched:
+            current = before[identifier]
+            changes = {k:v for k,v in incoming[identifier].items() if mode=='restore' or current[k] in ('','[]',0)}
+            if 'world' in changes:
+                changes['world_custom'] = 1
+            after = {**current, **changes}
+            if after != current:
+                updates[identifier] = changes
+        return before, updates, len(incoming)-len(matched)
+
+    def import_annotations(self, body, apply=False):
+        if not isinstance(body, dict):
+            raise ValueError('恢复请求格式无效。')
+        with self.lock, self.db:
+            if body.get('source_revision') != self.source_revision:
+                raise ValueError('照片目录已更换，请重新预览恢复。')
+            if apply and body.get('revision') != self.revision:
+                raise ValueError('相册在预览后发生变化，请重新预览再恢复。')
+            before, updates, missing = self._import_plan(body)
+            result = {'matched':len(before),'changed':len(updates),'missing':missing,'source_revision':self.source_revision,'revision':self.revision}
+            if apply and updates:
+                for identifier, fields in updates.items():
+                    self.db.execute(f"UPDATE photos SET {','.join(k+'=?' for k in fields)} WHERE id=?", list(fields.values())+[identifier])
+                ids = list(updates)
+                self.record_edit({i:before[i] for i in ids},self.annotation_snapshot(ids),'恢复整理记录')
+                self.revision += 1
+            return result
 
     def similar_groups(self):
         with self.lock:

@@ -14,6 +14,7 @@ import { Setup, SourceForm } from './components/SourceForm';
 import { DraftActions, Viewer } from './components/Viewer';
 import { Collections, MemoryControls } from './components/Discover';
 import { useEntrance } from './motion';
+import { Recovery } from './components/Recovery';
 import { Journal } from './components/Journal';
 import { Similar } from './components/Similar';
 import { CollectionEditor } from './components/CustomCollections';
@@ -69,6 +70,7 @@ function EmptyGallery({ album }: { album: AlbumHook }) {
 export function App() {
   const prefs = usePreferences();
   const album = useAlbum({ initialGroup: prefs.preferences.group, initialBrowse: prefs.preferences.browse });
+  const [recovery,setRecovery]=useState(false);
   const [collectionEdit, setCollectionEdit] = useState<CustomCollection | null | undefined>(undefined);
   const [appearance, setAppearance] = useState(false);
   const [stop, setStop] = useState(false);
@@ -106,7 +108,7 @@ export function App() {
       <div className="source-box"><div className="source-heading"><Icon name="folder" />照片在你的电脑上</div><p className="source-path">{path}</p>{sourceButton}<p>原照片只读 · 整理记录保存在本机</p></div>
     </aside>
     <main className="album-main"><header className="page-header"><div><p className="eyebrow">COLLECT MOMENTS, KEEP WANDERING</p><h1 key={title}>{title}{album.filters.favorites && (album.filters.world || album.filters.month) ? ' · 星标' : ''}</h1><p className="subtitle">每一张照片，都是一段曾经抵达的时光。</p></div><div className="header-actions">
-      <Button variant="outline" onPress={() => setAppearance(true)}><Icon name="palette" />外观</Button><Button variant="outline" onPress={() => { void album.scan(); }} isDisabled={!album.configured || c?.scanning || busy}><Icon name="refresh" />{c?.scanning ? '扫描中…' : '重新扫描'}</Button><a className="button button--outline" href="/api/export" download><Icon name="download" />导出记录</a><a className="button button--outline" href="/guide" target="_blank" rel="noopener noreferrer"><Icon name="info" />使用指南</a><a className="button button--outline" href={repository} target="_blank" rel="noopener noreferrer" title="前往仓库，登录 GitHub 后点击 Star"><Icon name="github" />Star on GitHub</a>
+      <Button variant="outline" onPress={() => setAppearance(true)}><Icon name="palette" />外观</Button><Button variant="outline" onPress={() => { void album.scan(); }} isDisabled={!album.configured || c?.scanning || busy}><Icon name="refresh" />{c?.scanning ? '扫描中…' : '重新扫描'}</Button><Button variant="outline" onPress={()=>setRecovery(true)} isDisabled={!album.configured || busy || album.pendingSourceChange || !!album.viewer || !!album.batch}>整理记录与恢复</Button><a className="button button--outline" href="/api/export" download><Icon name="download" />导出记录</a><a className="button button--outline" href="/guide" target="_blank" rel="noopener noreferrer"><Icon name="info" />使用指南</a><a className="button button--outline" href={repository} target="_blank" rel="noopener noreferrer" title="前往仓库，登录 GitHub 后点击 Star"><Icon name="github" />Star on GitHub</a>
     </div></header>
     {album.configured && <ModeTabs options={viewOptions} selected={album.view} onChange={view => { album.setView(view); }} label="相册功能" className="library-tabs" />}
     <div className="mobile-nav">{album.view === 'photos' && <><Button size="sm" variant={album.filters.favorites ? 'secondary' : 'primary'} onPress={() => album.setFavorites(false)}>全部</Button><Button size="sm" variant={album.filters.favorites ? 'primary' : 'secondary'} onPress={() => album.setFavorites(true)}><Icon name="star" />星标</Button><Button size="sm" variant="outline" onPress={() => setBrowse(album.browse === 'worlds' ? 'months' : 'worlds')}>{album.browse === 'worlds' ? '世界' : '月份'}</Button><BrowseSelect album={album} /></>}<p className="source-path">{path}</p>{sourceButton}</div>
@@ -128,6 +130,7 @@ export function App() {
     </main>
     {album.selectMode && <div className="batch-bar"><Button size="sm" variant="secondary" isDisabled={!album.selected.size} onPress={()=>setCollectionEdit(null)}>选图建合集</Button><span className="batch-count">已选 <strong>{album.selected.size}</strong> 张</span><Button variant="ghost" size="sm" onPress={album.selectFiltered}>全选筛选结果</Button><Button variant="ghost" size="sm" onPress={album.clearSelection}>取消选择</Button><Button size="sm" onPress={() => album.openBatch([...album.selected])} isDisabled={!album.selected.size}><Icon name="edit" />批量整理</Button></div>}
     {collectionEdit !== undefined && <CollectionEditor album={album} initial={collectionEdit || undefined} onClose={()=>setCollectionEdit(undefined)}/> }
+    {recovery && <Recovery album={album} onClose={()=>setRecovery(false)}/>}
     <Viewer album={album} />
     <Dialog isOpen={!!album.batch} onClose={() => { album.closeBatch(); }} title="为这些照片，留下共同的回忆" description={`为${album.batch?.label || '选中的照片'}（${album.batch?.ids.length || 0} 张）填写共同信息。留空的项目保持原样。`} isBusy={album.batch?.saving} footer={<><Button variant="ghost" onPress={() => { album.closeBatch(); }} isDisabled={album.pendingSourceChange || album.batch?.saving}>取消</Button><Button type="submit" form="batch-edit-form" isPending={album.batch?.saving} isDisabled={album.pendingSourceChange}>保存整理</Button></>}>
       {album.batch && <><form id="batch-edit-form" className="field-stack" onSubmit={event => { event.preventDefault(); void album.saveBatch(); }}><Field label="共同的世界名称" value={album.batch.fields.world} onChange={world => album.updateBatch({world})} maxLength={200} isDisabled={album.batch.saving} /><Field label="共同的标签" value={album.batch.fields.tagsText} onChange={tagsText => album.updateBatch({tagsText})} description="用逗号分隔；填写后替换这些照片的标签" isDisabled={album.batch.saving} /><Field label="共同的备注" value={album.batch.fields.note} onChange={note => album.updateBatch({note})} multiline maxLength={4000} isDisabled={album.batch.saving} /></form>{album.batch.error && <p className="form-message error" role="alert">{album.batch.error}</p>}<DraftActions album={album} /></>}

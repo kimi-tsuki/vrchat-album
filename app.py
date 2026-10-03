@@ -155,7 +155,7 @@ def photo_time(path: Path, metadata: dict, mtime: float) -> tuple[str, int]:
     return datetime.fromtimestamp(mtime).isoformat(timespec="seconds"), 1
 
 
-from library_features import LibraryFeatures
+from library_features import LibraryFeatures, annotation_values
 
 
 class Album(LibraryFeatures):
@@ -483,36 +483,19 @@ class Album(LibraryFeatures):
     def edit(self, ids: list[str], changes: dict):
         if not isinstance(ids, list) or not ids or len(ids) > 2000 or any(not isinstance(i, str) or not PHOTO_ID.fullmatch(i) for i in ids):
             raise ValueError("请选择有效的照片。")
-        allowed = {"world", "tags", "note", "favorite"}
-        if not isinstance(changes, dict) or not changes or set(changes) - allowed:
-            raise ValueError("编辑字段无效。")
-        fields = []
-        values = []
-        for key, value in changes.items():
-            if key in ("world", "note"):
-                limit = 200 if key == "world" else 4000
-                if not isinstance(value, str) or len(value) > limit:
-                    raise ValueError("世界名或备注太长。")
-                value = value.strip()
-            elif key == "tags":
-                if not isinstance(value, list) or len(value) > 30 or any(not isinstance(tag, str) or len(tag) > 80 for tag in value):
-                    raise ValueError("标签格式无效。")
-                value = json.dumps(list(dict.fromkeys(tag.strip() for tag in value if tag.strip())), ensure_ascii=False)
-            elif key == "favorite":
-                if not isinstance(value, bool):
-                    raise ValueError("收藏状态无效。")
-                value = int(value)
-            fields.append(f"{key}=?")
-            values.append(value)
-        with self.lock:
+        normalized = annotation_values(changes)
+        fields = [f"{key}=?" for key in normalized]
+        values = list(normalized.values())
+        with self.lock, self.db:
             placeholders = ",".join("?" for _ in ids)
             found = self.db.execute(f"SELECT count(*) FROM photos WHERE id IN ({placeholders}) AND id IN (SELECT id FROM files WHERE source=?)", ids + [source_key(self.source)]).fetchone()[0]
             if found != len(set(ids)):
                 raise ValueError("部分照片不在相册索引中。")
+            before = self.annotation_snapshot(ids)
             self.db.execute(f"UPDATE photos SET {','.join(fields)} WHERE id IN ({placeholders})", values + ids)
             if "world" in changes:
                 self.db.execute(f"UPDATE photos SET world_custom=1 WHERE id IN ({placeholders})", ids)
-            self.db.commit()
+            self.record_edit(before, self.annotation_snapshot(ids), "批量整理" if len(set(ids)) > 1 else "照片标注或星标")
             self.revision += 1
 
     def original(self, digest: str) -> Path | None:
@@ -603,6 +586,8 @@ class Handler(BaseHTTPRequestHandler):
         if route in ("/api/catalog", "/api/status"):
             state = self.album.status() if route == "/api/status" else self.album.catalog()
             self.respond(200, state)
+        elif route == "/api/history":
+            self.respond(200, self.album.history())
         elif route == "/api/similar":
             try:
                 self.respond(200, self.album.similar_groups())
@@ -611,7 +596,7 @@ class Handler(BaseHTTPRequestHandler):
         elif route == "/api/settings":
             self.respond(200, self.album.settings())
         elif route == "/api/export":
-            content = json.dumps(self.album.catalog(), ensure_ascii=False, indent=2).encode("utf-8")
+            content = json.dumps(self.album.export_annotations(), ensure_ascii=False, indent=2).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Disposition", 'attachment; filename="vrchat-album.json"')
@@ -652,8 +637,9 @@ class Handler(BaseHTTPRequestHandler):
             self.respond(415, {"error": "请使用相册界面操作。"})
             return
         try:
+            route = urlparse(self.path).path
             length = int(self.headers.get("Content-Length", "0"))
-            if not 0 <= length <= 1024 * 1024:
+            if not 0 <= length <= (16 * 1024 * 1024 if route in ("/api/import/preview", "/api/import/apply") else 1024 * 1024):
                 raise ValueError("请求太大。")
             body = json.loads(self.rfile.read(length) or b"{}")
             route = urlparse(self.path).path
@@ -672,6 +658,11 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("编辑格式无效。")
                 self.album.edit(body.get("ids"), {key: value for key, value in body.items() if key != "ids"})
                 self.respond(200, {"ok": True})
+            elif route == "/api/history/undo":
+                self.album.undo_edit(body)
+                self.respond(200, {"ok": True})
+            elif route in ("/api/import/preview", "/api/import/apply"):
+                self.respond(200, self.album.import_annotations(body, apply=route.endswith("/apply")))
             elif route == "/api/collections/save":
                 self.respond(200, {"collection": self.album.save_collection(body)})
             elif route == "/api/scan":
