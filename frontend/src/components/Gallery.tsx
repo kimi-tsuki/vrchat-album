@@ -5,6 +5,7 @@ import { groupPhotos, timeText, worldName } from '../model';
 import type { Layout } from '../preferences';
 import type { GroupMode, Photo } from '../types';
 import { Icon } from './Icon';
+import { useEntrance } from '../motion';
 
 export interface GalleryProps {
   photos: Photo[];
@@ -93,6 +94,7 @@ function PhotoGrid({ photos, layout, selected, selectMode, onOpen, onSelect, onF
       window.removeEventListener('resize', schedule);
     };
   }, [photos, layout, selectMode, selected]);
+  useEntrance(gridRef, photos.map(photo => photo.id).join(','), '.photo');
 
   return <div ref={gridRef} className="photo-grid" data-layout={layout}>
     {photos.map((photo) => {
@@ -106,7 +108,7 @@ function PhotoGrid({ photos, layout, selected, selectMode, onOpen, onSelect, onF
         </button>
         <Button isIconOnly size="sm" variant="tertiary" className={`photo-star${photo.favorite ? ' favorite' : ''}`}
           aria-label={photo.favorite ? '取消星标' : '添加星标'} aria-pressed={photo.favorite} onPress={() => onFavorite(photo)}>
-          <Icon name="star" />
+          <Icon key={String(photo.favorite)} name="star" />
         </Button>
         {selectMode && <Checkbox className="photo-select" isSelected={isSelected} aria-label={`${isSelected ? '取消选择' : '选择'}这张照片`}
           onChange={() => onSelect(photo)}>

@@ -1,5 +1,5 @@
 import { Button, Card, Input, Label, ListBox, ProgressBar, Select, Spinner, Tabs, TextField } from '@heroui/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAlbum } from './useAlbum';
 import type { AlbumHook } from './useAlbum';
 import { usePreferences } from './preferences';
@@ -13,6 +13,7 @@ import { Icon } from './components/Icon';
 import { Setup, SourceForm } from './components/SourceForm';
 import { DraftActions, Viewer } from './components/Viewer';
 import { Collections, MemoryControls } from './components/Discover';
+import { useEntrance } from './motion';
 
 const repository = 'https://github.com/kimi-tsuki/vrchat-album';
 const groupOptions: { id: GroupMode; label: string }[] = [{id:'world',label:'世界'},{id:'date',label:'日期'},{id:'session',label:'场次'}];
@@ -83,6 +84,11 @@ export function App() {
   const title = album.view === 'memories' ? '那年今日，再看一眼' : album.view === 'collections' ? album.collection?.title || '把回忆汇成一册' : album.filters.world ? album.sidebar.worlds.find(world => world.key === album.filters.world)?.name || '这个世界' : album.filters.month ? monthText(album.filters.month) : album.filters.favorites ? '最想再看一眼的瞬间' : '所有的漫游瞬间';
   const collectionIndex = album.view === 'collections' && !album.collection;
   const narrowed = album.hasFilters || album.view === 'memories' || !!album.collection;
+  const contentRef = useRef<HTMLDivElement>(null);
+  useEntrance(contentRef, JSON.stringify([album.configured, c?.ready, album.view, album.collection?.rule,
+    album.view === 'memories' ? [album.memoryDate, album.memoryRange] : null,
+    album.filters.world, album.filters.month, album.filters.favorites,
+    album.galleryGroup, prefs.preferences.layout]));
   const sourceButton = <Button variant="outline" size="sm" onPress={album.openSource} isDisabled={busy || !album.settings}><Icon name="folder" />{album.configured ? '更换照片文件夹' : '选择照片文件夹'}</Button>;
   const syncText = album.stopped ? '后台已停止 · 重新运行启动文件即可继续' : album.disconnected ? '连接中断 · 重新运行启动文件后会自动恢复' : !album.configured ? '选好照片文件夹，再开始整理' : c?.scanning ? c.ready ? '正在检查新照片，已有照片可以继续查看…' : '第一次整理中 · 完成后自动显示相册' : c?.ready ? `${narrowed ? '找到' : '已整理'} ${narrowed ? album.filtered.length : album.photos.length} 张照片 · 自动检查新照片${c.last_scan ? ` · ${c.last_scan.slice(11,16)} 更新` : ''}` : c?.error ? '整理暂未完成 · 可以重试扫描或更换目录' : '正在准备相册…';
   return <div className="album-shell">
@@ -93,7 +99,7 @@ export function App() {
       <nav className="sidebar-list" aria-label={album.browse === 'worlds' ? '世界筛选' : '月份筛选'}>{(album.browse === 'worlds' ? album.sidebar.worlds : album.sidebar.months).map(item => <Button key={item.key} variant="ghost" size="sm" className={(album.browse === 'worlds' ? album.filters.world : album.filters.month) === item.key ? 'active' : ''} onPress={() => album.browse === 'worlds' ? album.setWorld(album.filters.world === item.key ? '' : item.key) : album.setMonth(album.filters.month === item.key ? '' : item.key)}><span className="sidebar-item-dot" /><span className="sidebar-item-name">{item.name}</span><span className="nav-count">{item.count}</span></Button>)}</nav>
       <div className="source-box"><div className="source-heading"><Icon name="folder" />照片在你的电脑上</div><p className="source-path">{path}</p>{sourceButton}<p>原照片只读 · 整理记录保存在本机</p></div>
     </aside>
-    <main className="album-main"><header className="page-header"><div><p className="eyebrow">COLLECT MOMENTS, KEEP WANDERING</p><h1>{title}{album.filters.favorites && (album.filters.world || album.filters.month) ? ' · 星标' : ''}</h1><p className="subtitle">每一张照片，都是一段曾经抵达的时光。</p></div><div className="header-actions">
+    <main className="album-main"><header className="page-header"><div><p className="eyebrow">COLLECT MOMENTS, KEEP WANDERING</p><h1 key={title}>{title}{album.filters.favorites && (album.filters.world || album.filters.month) ? ' · 星标' : ''}</h1><p className="subtitle">每一张照片，都是一段曾经抵达的时光。</p></div><div className="header-actions">
       <Button variant="outline" onPress={() => setAppearance(true)}><Icon name="palette" />外观</Button><Button variant="outline" onPress={() => { void album.scan(); }} isDisabled={!album.configured || c?.scanning || busy}><Icon name="refresh" />{c?.scanning ? '扫描中…' : '重新扫描'}</Button><a className="button button--outline" href="/api/export" download><Icon name="download" />导出记录</a><a className="button button--outline" href="/guide" target="_blank" rel="noopener noreferrer"><Icon name="info" />使用指南</a><a className="button button--outline" href={repository} target="_blank" rel="noopener noreferrer" title="前往仓库，登录 GitHub 后点击 Star"><Icon name="github" />Star on GitHub</a>
     </div></header>
     {album.configured && <ModeTabs options={viewOptions} selected={album.view} onChange={view => { album.setView(view); }} label="相册功能" className="library-tabs" />}
@@ -104,11 +110,13 @@ export function App() {
     {!album.configured && album.settings && <Setup album={album} />}
     {album.configured && <>
       <div className="stats"><div className="stat"><strong>{c?.ready ? album.sidebar.total : '—'}</strong><span>漫游瞬间</span></div><div className="stat"><strong>{c?.ready ? album.sidebar.worldCount : '—'}</strong><span>留下足迹的世界</span></div><div className="stat"><strong>{album.sidebar.latestDate.replaceAll('-',' / ') || '等待整理'}</strong><span>最近的回忆</span></div></div>
+      <div ref={contentRef} className="album-content">
       {album.view === 'memories' && <MemoryControls album={album} />}
       {album.view === 'collections' && album.collection && <div className="collection-detail"><Button size="sm" variant="outline" onPress={() => album.setView('collections')}><Icon name="left" />返回自动合集</Button><p>{album.collection.description} · 这册共 {album.scoped.length} 张照片</p></div>}
       {!collectionIndex && <div className="toolbar"><TextField aria-label="搜索照片" value={album.filters.search} onChange={album.setSearch} className="search-field"><div className="search-input-wrap"><Icon name="search" /><Input placeholder="搜索世界、日期、标签或回忆…" />{album.filters.search && <Button isIconOnly size="sm" variant="ghost" className="search-clear" aria-label="清空搜索" onPress={() => album.setSearch('')}><Icon name="close" /></Button>}</div></TextField><div className="toolbar-right">{album.view !== 'memories' && <><span className="group-label">分组</span><ModeTabs options={groupOptions} selected={album.group} onChange={setGroup} label="照片分组" className="group-tabs" /></>}<Button size="sm" variant="outline" onPress={album.randomPhoto} isDisabled={!album.filtered.length || album.selectMode}><Icon name="shuffle" />随便看看</Button><Button variant={album.selectMode ? 'secondary' : 'outline'} onPress={album.toggleSelectMode}><Icon name="check" />{album.selectMode ? '完成选择' : '选择'}</Button></div></div>}
       <div className="sync-line"><span className={`sync-dot${c?.scanning ? ' scanning' : ''}`} /><span>{syncText}</span>{album.hasFilters && <Button variant="ghost" size="sm" onPress={album.clearFilters}>清除筛选</Button>}</div><ScanProgress album={album} />
       {collectionIndex ? c?.ready ? <Collections album={album} /> : !c?.scanning && <div className="empty"><Spinner /><p>正在准备合集…</p></div> : album.filtered.length ? <Gallery photos={album.filtered} allPhotos={album.photos} limit={album.limit} group={album.galleryGroup} layout={prefs.preferences.layout} selected={album.selected} selectMode={album.selectMode} onOpen={photo => album.openViewer(photo.id)} onSelect={photo => album.toggleSelected(photo.id)} onFavorite={photo => { void album.toggleFavorite(photo.id); }} onBatch={ids => { const session = album.photos.find(photo => photo.id === ids[0])?.session_id; if (session) void album.openSession(session); }} onMore={album.loadMore} /> : c?.ready ? <EmptyGallery album={album} /> : !c?.scanning && <div className="empty"><Spinner /><p>正在准备相册…</p></div>}
+      </div>
     </>}
     <footer className="page-footer"><span>{!!c?.duplicates && `${c.duplicates} 张完全相同的照片已合并显示 · `}所有原文件均保留{c?.version && ` · v${c.version}`}</span><div className="project-links"><a href={repository} target="_blank" rel="noopener noreferrer"><Icon name="github" />GitHub 项目</a><a href={repository} target="_blank" rel="noopener noreferrer" title="打开仓库后登录 GitHub，点击 Star 支持项目"><Icon name="star" />Star on GitHub</a><Button variant="ghost" size="sm" onPress={() => setStop(true)} isDisabled={album.stopped}>停止后台</Button></div></footer><p className="project-hint">喜欢这个相册？前往 GitHub 仓库并点击 Star 支持项目。</p>
     </main>
