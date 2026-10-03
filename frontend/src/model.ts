@@ -62,8 +62,8 @@ export interface PhotoGroup {
   photos: Photo[];
 }
 
-export function groupPhotos(photos: readonly Photo[], mode: GroupMode, limit = Infinity): PhotoGroup[] {
-  const ordered = orderPhotos(photos, mode);
+export function groupPhotos(photos: readonly Photo[], mode: GroupMode, limit = Infinity, alreadyOrdered = false): PhotoGroup[] {
+  const ordered = alreadyOrdered ? photos : orderPhotos(photos, mode);
   const counts = new Map<string, number>();
   const groups = new Map<string, Photo[]>();
   for (const photo of ordered) {

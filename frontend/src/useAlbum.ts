@@ -3,7 +3,7 @@ import { albumApi, type AlbumApi } from './api';
 import { customCards, buildCollections, dateNumber, localDateKey, scopeGroup, scopePhotos } from './collections';
 import {
   catalogError, createDraft, EMPTY_FIELDS, EMPTY_FILTERS, fieldsFrom,
-  filterPhotos, groupPhotos, orderPhotos, sidebarModel, sortPhotos, tagsFrom,
+  filterPhotos, orderPhotos, sidebarModel, sortPhotos, tagsFrom,
 } from './model';
 import type {
   AlbumCatalog, AlbumState, AnnotationChanges, AnnotationFields,
@@ -112,6 +112,7 @@ export class AlbumController {
   }
 
   private async annotationSourceCurrent(): Promise<boolean> {
+    if (this.state.catalog?.index_complete === false) { this.notify('索引正在载入，完成后即可保存和批量整理。'); return false; }
     if (this.state.pendingSourceChange || !this.state.catalog) return false;
     const sourceRevision = this.state.catalog.source_revision;
     const status = await this.api.status();
@@ -187,7 +188,7 @@ export class AlbumController {
       if (epoch !== this.sourceEpoch || lifecycle !== this.lifecycle || !this.alive) return;
       if (this.protectDraft(status.source_revision)) return;
       const catalog = this.state.catalog;
-      if (!catalog || status.revision !== catalog.revision || status.source_revision !== catalog.source_revision ||
+      if (!catalog || catalog.index_complete === false || status.revision !== catalog.revision || status.source_revision !== catalog.source_revision ||
         status.configured !== catalog.configured || status.ready !== catalog.ready) {
         await this.refresh();
       } else {
@@ -215,7 +216,12 @@ export class AlbumController {
     const epoch = this.sourceEpoch;
     const lifecycle = this.lifecycle;
     try {
-      const catalog = await this.api.catalog();
+      const progressive = !this.state.catalog || this.state.catalog.index_complete === false;
+      const cancelled = () => epoch !== this.sourceEpoch || lifecycle !== this.lifecycle || !this.alive || this.state.stopped;
+      const catalog = await this.api.catalog(page => {
+        if (!progressive || cancelled() || this.protectDraft(page.source_revision)) return;
+        this.update({catalog:page,photos:page.photos,disconnected:false});
+      }, cancelled);
       if (epoch !== this.sourceEpoch || lifecycle !== this.lifecycle || !this.alive) return;
       if (this.protectDraft(catalog.source_revision)) return;
       const changed = this.state.catalog && catalog.source_revision !== this.state.catalog.source_revision;
@@ -227,7 +233,11 @@ export class AlbumController {
       const ids = new Set(photos.map(photo => photo.id));
       const viewer = this.state.viewer;
       const viewingPhoto = viewer && photos.find(photo => photo.id === viewer.id);
+      const selection = this.state.collection;
+      const collectionId = selection?.rule.kind === 'custom' ? selection.rule.value.id : undefined;
+      const updatedCollection = catalog.custom_collections?.find(c=>c.id===collectionId);
       this.update({
+        collection: updatedCollection ? { ...selection!, title:updatedCollection.name, rule:{kind:'custom',value:updatedCollection} } : selection,
         catalog: { ...catalog, photos }, photos,
         selected: new Set([...this.state.selected].filter(id => ids.has(id))),
         disconnected: false, pendingSourceChange: false,
@@ -281,6 +291,7 @@ export class AlbumController {
   setWorld = (world: string): void => { if (this.setView('photos')) this.setFilters({ world, month: '' }); };
   setFavorites = (favorites: boolean): void => { if (this.setView('photos')) this.setFilters({ favorites, world: '', month: '' }); };
   private canNavigate(): boolean {
+    if (this.state.catalog?.index_complete === false) { this.notify('索引正在载入，请稍后切换范围。'); return false; }
     if (this.state.pendingSourceChange || this.state.viewer?.dirty || this.state.viewer?.saving || this.state.batch) {
       this.notify('先保存或关闭当前整理窗口，再切换浏览范围。');
       return false;
@@ -325,19 +336,19 @@ export class AlbumController {
   setBrowse = (browse: BrowseMode): void => this.update({ browse });
   loadMore = (): void => this.update({ limit: this.state.limit + 180 });
 
-  toggleSelectMode = (): void => this.update({
+  toggleSelectMode = (): void => { if (this.state.catalog?.index_complete === false) return; this.update({
     selectMode: !this.state.selectMode,
     selected: this.state.selectMode ? new Set() : this.state.selected,
-  });
+  }); };
   toggleSelected = (id: string): void => {
     const selected = new Set(this.state.selected);
     if (selected.has(id)) selected.delete(id);
     else if (this.state.photos.some(photo => photo.id === id)) selected.add(id);
     this.update({ selected });
   };
-  selectFiltered = (): void => this.update({ selected: new Set([
+  selectFiltered = (): void => { if(this.state.catalog?.index_complete === false) return; this.update({ selected: new Set([
     ...this.state.selected, ...this.visiblePhotos().map(photo => photo.id),
-  ]) });
+  ]) }); };
   clearSelection = (): void => this.update({ selected: new Set() });
 
   openViewer = (id: string, order?: readonly string[]): void => {
@@ -665,7 +676,6 @@ export function useAlbum(options: AlbumOptions = {}) {
     () => state.collection?.rule.kind === 'custom' ? filterPhotos(scoped, state.filters) : orderPhotos(filterPhotos(scoped, state.filters), galleryGroup),
     [scoped, state.filters, galleryGroup, state.collection],
   );
-  const groups = useMemo(() => groupPhotos(filtered, galleryGroup, state.limit), [filtered, galleryGroup, state.limit]);
   const collections = useMemo(() => [...customCards(state.photos, state.catalog?.custom_collections || []), ...buildCollections(state.photos, state.today)], [state.photos, state.today, state.catalog?.custom_collections]);
   const sidebar = useMemo(() => sidebarModel(state.photos), [state.photos]);
   const viewerId = state.viewer?.id;
@@ -681,8 +691,9 @@ export function useAlbum(options: AlbumOptions = {}) {
   const sessionId = viewerPhoto?.session_id;
   const sessionCount = useMemo(() => sessionId ? state.photos.filter(photo => photo.session_id === sessionId).length : 0, [state.photos, sessionId]);
   return {
-    ...state, ...controller.actions, scoped, filtered, groups, sidebar, collections, galleryGroup,
-    viewerPhoto, viewerMissing, viewerIndex, viewerCount: viewerOrder.length, sessionCount,
+    ...state, ...controller.actions, scoped, filtered, sidebar, collections, galleryGroup,
+    viewerPhoto, viewerMissing, viewerIndex, viewerOrder, viewerCount: viewerOrder.length, sessionCount,
+    indexComplete: state.catalog?.index_complete !== false,
     configured: state.catalog?.configured ?? state.settings?.configured ?? false,
     hasFilters: !!(state.filters.month || state.filters.world || state.filters.favorites || state.filters.search),
   };

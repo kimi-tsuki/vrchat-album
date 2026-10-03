@@ -383,3 +383,12 @@ describe('typed album controller', () => {
     expect(album.getSnapshot().stopped).toBe(true);
   });
 });
+
+it('shows the first page without allowing incomplete whole-library selection',async()=>{
+  const api=mockApi();let complete!:()=>void;const gate=new Promise<void>(resolve=>{complete=resolve;});
+  api.catalog.mockImplementationOnce(async onPage=>{onPage?.(catalog({photos:[photo('a')],index_complete:false,total_photos:2}));await gate;return catalog({index_complete:true,total_photos:2});});
+  const album=controller(api);const pending=album.refresh();
+  expect(album.getSnapshot().photos.length).toBe(1);album.toggleSelectMode();album.selectFiltered();
+  expect(album.getSnapshot().selectMode).toBe(false);expect(album.getSnapshot().selected.size).toBe(0);
+  expect(album.setView('collections')).toBe(false);complete();await pending;album.toggleSelectMode();album.selectFiltered();expect(album.getSnapshot().selected.size).toBe(2);
+});

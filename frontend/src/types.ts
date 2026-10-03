@@ -59,6 +59,8 @@ export interface AlbumStatus {
 }
 
 export interface AlbumCatalog extends AlbumStatus {
+  index_complete?: boolean;
+  total_photos?: number;
   custom_collections?: CustomCollection[];
   photos: Photo[];
 }

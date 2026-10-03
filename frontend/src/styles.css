@@ -390,3 +390,10 @@ h1 { font-size: 30px; line-height: 1.35; font-weight: 600; letter-spacing: .02em
 .album-history { margin:14px 0 28px; max-height:230px; overflow:auto; }.album-history p { display:flex;flex-wrap:wrap;gap:10px;font-size:11px;padding:8px 0;border-bottom:1px solid var(--border); }.album-history time,.album-history small { color:var(--quiet); }.album-history span { flex:1; }
 .album-recovery-form { display:flex; flex-direction:column; gap:15px; border:0; padding:0; margin:0; }.album-native-field textarea { width:100%;padding:10px;background:var(--field-bg);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:11px;resize:vertical; }
 .album-import-preview { padding:15px;background:var(--accent-bg);border-radius:12px;font-size:12px; }
+
+.album-windowed-grid { display:flex;flex-direction:column;gap:19px; }.album-photo-block { width:100%; min-width:0; overflow-anchor:none; }
+
+.album-windowed-grid { --photo-min:216px;--photo-gap:19px;--photo-target:220px; }
+@media(max-width:760px) { .album-windowed-grid { --photo-min:145px;--photo-gap:14px;--photo-target:160px; gap:14px; } }
+
+.library-tabs { width:fit-content; }

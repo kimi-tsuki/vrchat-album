@@ -7,6 +7,10 @@ from datetime import date, datetime
 from PIL import Image, ImageStat
 
 
+class CatalogChanged(ValueError):
+    pass
+
+
 def annotation_values(changes):
     if not isinstance(changes, dict) or not changes or set(changes) - {'world', 'tags', 'note', 'favorite'}:
         raise ValueError('编辑字段无效。')
@@ -29,6 +33,7 @@ def annotation_values(changes):
 
 class LibraryFeatures:
     def initialize_library(self):
+        self._page_cache = None
         self.db.execute("""CREATE TABLE IF NOT EXISTS collections (
             source TEXT NOT NULL, id TEXT NOT NULL, revision INTEGER NOT NULL,
             document TEXT NOT NULL, PRIMARY KEY(source,id))""")
@@ -36,6 +41,25 @@ class LibraryFeatures:
         self.db.execute("""CREATE TABLE IF NOT EXISTS edit_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT NOT NULL, created TEXT NOT NULL,
             label TEXT NOT NULL, before TEXT NOT NULL, after TEXT NOT NULL, undone INTEGER NOT NULL DEFAULT 0)""")
+
+    def catalog_page(self, offset=0, limit=256, snapshot=None):
+        if not 0 <= offset or not 1 <= limit <= 512:
+            raise ValueError('分页范围无效。')
+        with self.lock:
+            token = f'{self.source_revision}:{self.revision}'
+            if snapshot and snapshot != token:
+                raise CatalogChanged('索引已更新，正在重新载入。')
+            if offset and not snapshot:
+                raise ValueError('后续分页需要提供索引快照编号。')
+            if not self._page_cache or self._page_cache[0] != token:
+                self._page_cache = (token, self.catalog())
+            catalog = self._page_cache[1]
+            photos = catalog['photos']
+            if offset > len(photos):
+                raise ValueError('分页位置超出索引。')
+            end = min(len(photos), offset+limit)
+            return {**catalog, **self._state(), 'photos':photos[offset:end], 'snapshot':token,
+                    'total_photos':len(photos), 'next_offset':end if end<len(photos) else None}
 
     def annotation_snapshot(self, ids):
         # Chunk IN queries to support large recovery files on older SQLite builds.

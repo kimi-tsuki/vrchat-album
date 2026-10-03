@@ -1,11 +1,12 @@
 import { Button, Checkbox, Chip } from '@heroui/react';
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { justified, masonry, ratioOf, type LayoutItem } from '../gallery-layout';
 import { groupPhotos, timeText, worldName } from '../model';
 import type { Layout } from '../preferences';
 import type { GroupMode, Photo } from '../types';
 import { Icon } from './Icon';
 import { useEntrance } from '../motion';
+import { PHOTO_BLOCK_SIZE, estimateBlockHeight } from '../virtual-gallery';
 
 export interface GalleryProps {
   photos: Photo[];
@@ -126,8 +127,36 @@ function PhotoGrid({ photos, layout, selected, selectMode, onOpen, onSelect, onF
   </div>;
 }
 
+function VirtualPhotoBlock(props: Parameters<typeof PhotoGrid>[0]) {
+  const ref=useRef<HTMLDivElement>(null);
+  const [near,setNear]=useState(typeof IntersectionObserver==='undefined');
+  const [focused,setFocused]=useState(false);
+  const [width,setWidth]=useState(900);
+  const [metrics,setMetrics]=useState({gap:19,minWidth:216,targetHeight:220});
+  const [measured,setMeasured]=useState<{width:number;layout:Layout;height:number}|null>(null);
+  useLayoutEffect(()=>{
+    const block=ref.current;if(!block)return;
+    const readMetrics=()=>{const style=getComputedStyle(block);setMetrics({gap:parseFloat(style.getPropertyValue('--photo-gap'))||19,minWidth:parseFloat(style.getPropertyValue('--photo-min'))||216,targetHeight:parseFloat(style.getPropertyValue('--photo-target'))||220});};
+    const resize=new ResizeObserver(()=>{readMetrics();setWidth(block.clientWidth);const grid=block.firstElementChild;if(grid)setMeasured({width:block.clientWidth,layout:props.layout,height:grid.getBoundingClientRect().height});});
+    readMetrics();setWidth(block.clientWidth);resize.observe(block);
+    const io=typeof IntersectionObserver==='undefined'?null:new IntersectionObserver(entries=>setNear(entries[0].isIntersecting),{rootMargin:'700px 0px'});
+    io?.observe(block);
+    return()=>{resize.disconnect();io?.disconnect();};
+  },[props.layout,props.photos]);
+  const active=near||focused;
+  const height=measured && measured.width===width && measured.layout===props.layout?measured.height:estimateBlockHeight(props.photos,width,props.layout,metrics);
+  return <div ref={ref} className="album-photo-block" data-rendered={active?'true':'false'} style={active?undefined:{height:Math.max(1,height)}} onFocusCapture={()=>setFocused(true)} onBlurCapture={e=>{if(!e.currentTarget.contains(e.relatedTarget))setFocused(false);}}>
+    {active && <PhotoGrid {...props}/>}
+  </div>;
+}
+
+function WindowedGrid(props: Parameters<typeof PhotoGrid>[0]) {
+  const blocks=useMemo(()=>Array.from({length:Math.ceil(props.photos.length/PHOTO_BLOCK_SIZE)},(_,i)=>props.photos.slice(i*PHOTO_BLOCK_SIZE,(i+1)*PHOTO_BLOCK_SIZE)),[props.photos]);
+  return <div className="album-windowed-grid">{blocks.map(block=><VirtualPhotoBlock {...props} photos={block} key={`${block[0].id}:${block.at(-1)!.id}`}/>)}</div>;
+}
+
 export function Gallery({ preserveOrder, photos, allPhotos = photos, limit, group, layout, selected, selectMode, onOpen, onSelect, onFavorite, onBatch, onMore }: GalleryProps) {
-  const groups = useMemo(() => preserveOrder ? [{key:'custom',title:'合集照片',meta:'自定顺序',count:photos.length,photos:photos.slice(0,limit)}] : groupPhotos(photos, group, limit), [photos, group, limit, preserveOrder]);
+  const groups = useMemo(() => preserveOrder ? [{key:'custom',title:'合集照片',meta:'自定顺序',count:photos.length,photos:photos.slice(0,limit)}] : groupPhotos(photos, group, limit, true), [photos, group, limit, preserveOrder]);
   const remaining = Math.max(0, photos.length - limit);
   return <div id="gallery" className={`gallery${selectMode ? ' selection-enabled' : ''}`}>
     {groups.map((section) => <section className="group" key={section.key}>
@@ -138,7 +167,7 @@ export function Gallery({ preserveOrder, photos, allPhotos = photos, limit, grou
         <span className="group-line" />
         {group === 'session' && <Button size="sm" variant="ghost" className="group-edit" onPress={() => onBatch(allPhotos.filter((photo) => photo.session_id === section.key).map((photo) => photo.id), '填写这一场')}> <Icon name="edit" />填写这一场</Button>}
       </div>
-      <PhotoGrid photos={section.photos} layout={layout} selected={selected} selectMode={selectMode} onOpen={onOpen} onSelect={onSelect} onFavorite={onFavorite} />
+      <WindowedGrid photos={section.photos} layout={layout} selected={selected} selectMode={selectMode} onOpen={onOpen} onSelect={onSelect} onFavorite={onFavorite} />
     </section>)}
     {remaining > 0 && <div className="load-more"><Button variant="secondary" onPress={onMore}>继续回看 · 还有 {remaining.toLocaleString()} 张</Button></div>}
   </div>;

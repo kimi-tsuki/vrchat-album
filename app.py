@@ -20,7 +20,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 if sys.version_info < (3, 10):
     raise SystemExit("需要 Python 3.10 或更高版本。请更新 Python 后运行 python install.py。")
@@ -155,7 +155,7 @@ def photo_time(path: Path, metadata: dict, mtime: float) -> tuple[str, int]:
     return datetime.fromtimestamp(mtime).isoformat(timespec="seconds"), 1
 
 
-from library_features import LibraryFeatures, annotation_values
+from library_features import LibraryFeatures, annotation_values, CatalogChanged
 
 
 class Album(LibraryFeatures):
@@ -583,7 +583,15 @@ class Handler(BaseHTTPRequestHandler):
             self.respond(403, {"error": "只允许在本机打开相册。"})
             return
         route = urlparse(self.path).path
-        if route in ("/api/catalog", "/api/status"):
+        if route == "/api/catalog/page":
+            try:
+                query = parse_qs(urlparse(self.path).query)
+                self.respond(200, self.album.catalog_page(int(query.get('offset',['0'])[0]), int(query.get('limit',['256'])[0]), query.get('snapshot',[None])[0]))
+            except CatalogChanged as exc:
+                self.respond(409, {"error":str(exc)})
+            except ValueError as exc:
+                self.respond(400, {"error":str(exc)})
+        elif route in ("/api/catalog", "/api/status"):
             state = self.album.status() if route == "/api/status" else self.album.catalog()
             self.respond(200, state)
         elif route == "/api/history":

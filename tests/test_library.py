@@ -105,3 +105,25 @@ class RecoveryTests(FeatureTests):
         doc['photos'] = [{'id':identifier,'note':'good'}]
         with self.assertRaises(ValueError):
             self.album.import_annotations({'document':doc,'mode':'restore','source_revision':1})
+
+
+class PagingTests(FeatureTests):
+    def test_pages_use_one_snapshot_and_reject_changed_revisions(self):
+        self.image('VRChat_2026-10-03_12-00-00.1.png', 'red')
+        self.image('VRChat_2026-10-03_12-01-00.2.png', 'blue')
+        self.album.scan()
+        first = self.album.catalog_page(0,1)
+        second = self.album.catalog_page(first['next_offset'],1,first['snapshot'])
+        self.assertEqual(first['total_photos'], 2)
+        self.assertIsNone(second['next_offset'])
+        self.assertNotEqual(first['photos'][0]['id'], second['photos'][0]['id'])
+        self.assertEqual(first['snapshot'], second['snapshot'])
+        cached = self.album._page_cache
+        self.album.catalog_page(0,1)
+        self.assertIs(self.album._page_cache, cached)
+        self.album.edit([first['photos'][0]['id']], {'favorite':True})
+        with self.assertRaises(ValueError):
+            self.album.catalog_page(1,1,first['snapshot'])
+        for offset,limit in ((-1,1),(0,0),(0,513),(10,1)):
+            with self.assertRaises(ValueError):
+                self.album.catalog_page(offset,limit)

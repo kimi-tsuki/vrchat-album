@@ -44,6 +44,12 @@ export function Viewer({ album }: { album: AlbumHook }) {
   const [imageReady, setImageReady] = useState(false);
   const [fullscreenError, setFullscreenError] = useState('');
   const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if(!photo || !imageReady || !viewer) return;
+    const neighbors=[album.viewerOrder[album.viewerIndex-1],album.viewerOrder[album.viewerIndex+1]];
+    const images=neighbors.flatMap(id=>{const next=album.photos.find(p=>p.id===id);if(!next || next.width*next.height>16_000_000)return [];const image=new Image();image.decoding='async';image.src=next.original_url;return [image];});
+    return()=>{for(const image of images)image.removeAttribute('src');};
+  },[photo?.id,imageReady,album.viewerIndex,album.viewerOrder,album.photos]);
   const blocked = !viewer || viewer.dirty || viewer.saving || album.pendingSourceChange || album.viewerMissing || !!album.batch;
   useEffect(() => { setImageReady(false); }, [photo?.id]);
   useEffect(() => {
