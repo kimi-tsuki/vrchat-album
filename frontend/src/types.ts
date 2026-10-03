@@ -1,6 +1,6 @@
 export type GroupMode = 'world' | 'date' | 'session';
 export type BrowseMode = 'worlds' | 'months';
-export type LibraryView = 'photos' | 'memories' | 'collections' | 'similar';
+export type LibraryView = 'photos' | 'memories' | 'collections' | 'similar' | 'journal';
 export type MemoryRange = 'day' | 'month';
 export type CollectionRule =
   | { kind: 'custom'; value: CustomCollection }
