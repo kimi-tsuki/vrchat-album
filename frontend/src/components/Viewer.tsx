@@ -36,9 +36,9 @@ export function Viewer({ album }: { album: AlbumHook }) {
   return <Modal><Modal.Backdrop isOpen={!!viewer} onOpenChange={open => { if (!open) void album.closeViewer(); }} isDismissable={false} isKeyboardDismissDisabled={viewer?.saving || album.pendingSourceChange}>
     <Modal.Container size="full" className="viewer-container"><Modal.Dialog aria-label="照片查看器" className="viewer-dialog">
       {photo && viewer && <>
-        <header className="viewer-top"><div className="viewer-position"><strong>{album.viewerIndex >= 0 ? album.viewerIndex + 1 : '—'}</strong> / {album.filtered.length} <span> · {worldName(photo)}</span></div><div className="viewer-top-actions">
+        <header className="viewer-top"><div className="viewer-position"><strong>{album.viewerIndex >= 0 ? album.viewerIndex + 1 : '—'}</strong> / {album.viewerCount} <span> · {worldName(photo)}</span></div><div className="viewer-top-actions">
           <Button isIconOnly variant="ghost" aria-label="上一张照片" onPress={() => { void album.moveViewer(-1); }} isDisabled={album.viewerIndex <= 0 || viewer.saving || album.pendingSourceChange}><Icon name="left" /></Button>
-          <Button isIconOnly variant="ghost" aria-label="下一张照片" onPress={() => { void album.moveViewer(1); }} isDisabled={album.viewerIndex < 0 || album.viewerIndex >= album.filtered.length - 1 || viewer.saving || album.pendingSourceChange}><Icon name="right" /></Button>
+          <Button isIconOnly variant="ghost" aria-label="下一张照片" onPress={() => { void album.moveViewer(1); }} isDisabled={album.viewerIndex < 0 || album.viewerIndex >= album.viewerCount - 1 || viewer.saving || album.pendingSourceChange}><Icon name="right" /></Button>
           <Button isIconOnly variant="ghost" aria-label={photo.favorite ? '取消星标' : '添加星标'} aria-pressed={photo.favorite} onPress={() => { void album.toggleFavorite(photo.id); }} isDisabled={album.pendingSourceChange}><Icon name="star" style={photo.favorite ? { fill: 'currentColor', color: 'var(--accent)' } : undefined} /></Button>
           <Button isIconOnly variant="ghost" aria-label="关闭照片查看器" isDisabled={viewer.saving || album.pendingSourceChange} onPress={() => { void album.closeViewer(); }}><Icon name="close" /></Button>
         </div></header>

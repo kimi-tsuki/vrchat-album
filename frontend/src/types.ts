@@ -1,5 +1,11 @@
 export type GroupMode = 'world' | 'date' | 'session';
 export type BrowseMode = 'worlds' | 'months';
+export type LibraryView = 'photos' | 'memories' | 'collections';
+export type MemoryRange = 'day' | 'month';
+export type CollectionRule =
+  | { kind: 'favorites' | 'recent' | 'notes' | 'unwritten' }
+  | { kind: 'session' | 'world' | 'tag' | 'year'; value: string };
+export interface CollectionSelection { rule: CollectionRule; title: string; description: string }
 
 export interface Photo {
   id: string;
@@ -82,6 +88,7 @@ export interface AnnotationChanges {
 
 export interface ViewerState {
   id: string;
+  order: readonly string[];
   photo?: Photo;
   fields: AnnotationFields;
   dirty: boolean;
@@ -115,6 +122,11 @@ export interface AlbumState {
   filters: PhotoFilters;
   group: GroupMode;
   browse: BrowseMode;
+  view: LibraryView;
+  collection: CollectionSelection | null;
+  today: string;
+  memoryDate: string;
+  memoryRange: MemoryRange;
   limit: number;
   selectMode: boolean;
   selected: ReadonlySet<string>;

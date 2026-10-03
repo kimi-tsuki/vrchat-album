@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { albumApi, type AlbumApi } from './api';
+import { buildCollections, dateNumber, localDateKey, scopeGroup, scopePhotos } from './collections';
 import {
   catalogError, createDraft, EMPTY_FIELDS, EMPTY_FILTERS, fieldsFrom,
   filterPhotos, groupPhotos, orderPhotos, sidebarModel, sortPhotos, tagsFrom,
 } from './model';
 import type {
   AlbumCatalog, AlbumState, AnnotationChanges, AnnotationFields,
-  BrowseMode, GroupMode,
+  BrowseMode, CollectionSelection, GroupMode, LibraryView, MemoryRange,
 } from './types';
 
 const SOURCE_CONFLICT = '另一个窗口更换了照片文件夹，这份草稿无法保存到当前相册。内容仍保留在这里；可先复制或导出，再明确放弃草稿并打开当前相册。';
@@ -16,12 +17,15 @@ const errorMessage = (error: unknown): string => error instanceof Error ? error.
 export interface AlbumOptions {
   initialGroup?: GroupMode;
   initialBrowse?: BrowseMode;
+  today?: string;
 }
 
 function initialState(options: AlbumOptions): AlbumState {
+  const today = options.today && dateNumber(options.today) !== null ? options.today : localDateKey();
   return {
     catalog: null, settings: null, photos: [], filters: { ...EMPTY_FILTERS },
     group: options.initialGroup || 'world', browse: options.initialBrowse || 'worlds',
+    view: 'photos', collection: null, today, memoryDate: today, memoryRange: 'day',
     limit: 180, selectMode: false, selected: new Set(), viewer: null, batch: null,
     sourceOpen: false, sourceDraft: '', sourceMessage: '', sourceError: false,
     sourceApplying: false, pickerPending: false, pendingSourceChange: false, draftText: '',
@@ -69,6 +73,7 @@ export class AlbumController {
   private resetView(): void {
     this.update({
       photos: [], filters: { ...EMPTY_FILTERS }, limit: 180,
+      view: 'photos', collection: null,
       selectMode: false, selected: new Set(), viewer: null, batch: null, draftText: '',
     });
   }
@@ -272,9 +277,45 @@ export class AlbumController {
   };
 
   setSearch = (search: string): void => this.setFilters({ search });
-  setMonth = (month: string): void => this.setFilters({ month, world: '' });
-  setWorld = (world: string): void => this.setFilters({ world, month: '' });
-  setFavorites = (favorites: boolean): void => this.setFilters({ favorites, world: '', month: '' });
+  setMonth = (month: string): void => { if (this.setView('photos')) this.setFilters({ month, world: '' }); };
+  setWorld = (world: string): void => { if (this.setView('photos')) this.setFilters({ world, month: '' }); };
+  setFavorites = (favorites: boolean): void => { if (this.setView('photos')) this.setFilters({ favorites, world: '', month: '' }); };
+  private canNavigate(): boolean {
+    if (this.state.pendingSourceChange || this.state.viewer?.dirty || this.state.viewer?.saving || this.state.batch) {
+      this.notify('先保存或关闭当前整理窗口，再切换浏览范围。');
+      return false;
+    }
+    return true;
+  }
+  setView = (view: LibraryView): boolean => {
+    if (!this.canNavigate()) return false;
+    if (view === this.state.view && !(view === 'collections' && this.state.collection)) return true;
+    this.update({ view, collection: null, filters: { ...EMPTY_FILTERS }, limit: 180,
+      selectMode: false, selected: new Set(), viewer: null });
+    return true;
+  };
+  openCollection = (collection: CollectionSelection): void => {
+    if (!this.canNavigate()) return;
+    this.update({ view: 'collections', collection: { rule: { ...collection.rule }, title: collection.title, description: collection.description },
+      filters: { ...EMPTY_FILTERS }, limit: 180, selectMode: false, selected: new Set(), viewer: null });
+  };
+  setMemoryDate = (memoryDate: string): void => {
+    if (dateNumber(memoryDate) === null || !this.canNavigate()) return;
+    this.update({ memoryDate, limit: 180, selected: new Set(), selectMode: false });
+  };
+  setMemoryRange = (memoryRange: MemoryRange): void => {
+    if (!this.canNavigate()) return;
+    this.update({ memoryRange, limit: 180, selected: new Set(), selectMode: false });
+  };
+  syncToday = (today = localDateKey()): void => {
+    if (today === this.state.today || dateNumber(today) === null || this.state.viewer || this.state.batch) return;
+    const followsToday = this.state.memoryDate === this.state.today;
+    this.update({ today, memoryDate: followsToday ? today : this.state.memoryDate,
+      ...(followsToday && this.state.view === 'memories' ? { limit: 180, selected: new Set(), selectMode: false } : {}) });
+  };
+  private visiblePhotos() {
+    return orderPhotos(filterPhotos(scopePhotos(this.state.photos, this.state), this.state.filters), scopeGroup(this.state));
+  }
   clearFilters = (): void => this.update({ filters: { ...EMPTY_FILTERS }, limit: 180 });
   private setFilters(patch: Partial<AlbumState['filters']>): void {
     this.update({ filters: { ...this.state.filters, ...patch }, limit: 180 });
@@ -294,16 +335,24 @@ export class AlbumController {
     this.update({ selected });
   };
   selectFiltered = (): void => this.update({ selected: new Set([
-    ...this.state.selected, ...filterPhotos(this.state.photos, this.state.filters).map(photo => photo.id),
+    ...this.state.selected, ...this.visiblePhotos().map(photo => photo.id),
   ]) });
   clearSelection = (): void => this.update({ selected: new Set() });
 
-  openViewer = (id: string): void => {
+  openViewer = (id: string, order?: readonly string[]): void => {
     if (this.state.selectMode) { this.toggleSelected(id); return; }
     if (this.state.pendingSourceChange) return;
     const photo = this.state.photos.find(item => item.id === id);
     if (!photo) return;
-    this.update({ viewer: { id, photo, fields: fieldsFrom(photo), dirty: false, saving: false, message: '' }, draftText: '' });
+    const sequence = order || this.visiblePhotos().map(item => item.id);
+    if (!sequence.includes(id)) return;
+    this.update({ viewer: { id, order: sequence, photo, fields: fieldsFrom(photo), dirty: false, saving: false, message: '' }, draftText: '' });
+  };
+  randomPhoto = (): void => {
+    if (this.state.selectMode || !this.canNavigate()) return;
+    const photos = this.visiblePhotos();
+    if (!photos.length) return;
+    this.openViewer(photos[Math.floor(Math.random() * photos.length)].id);
   };
   updateViewer = (patch: Partial<AnnotationFields>): void => {
     const viewer = this.state.viewer;
@@ -357,10 +406,13 @@ export class AlbumController {
   moveViewer = async (direction: number): Promise<void> => {
     if (this.state.pendingSourceChange) return;
     if (this.state.viewer?.dirty && !await this.saveViewer(false)) return;
-    const filtered = orderPhotos(filterPhotos(this.state.photos, this.state.filters), this.state.group);
-    const index = filtered.findIndex(photo => photo.id === this.state.viewer?.id);
-    const next = index >= 0 ? filtered[index + direction] : undefined;
-    if (next) this.openViewer(next.id);
+    const order = this.state.viewer?.order || [];
+    const current = this.state.viewer?.id;
+    const ids = new Set(this.state.photos.map(photo => photo.id));
+    const available = order.filter(id => ids.has(id));
+    const index = available.indexOf(current || '');
+    const next = index >= 0 ? available[index + direction] : undefined;
+    if (next) this.openViewer(next, order);
   };
 
   toggleFavorite = async (id: string): Promise<void> => {
@@ -579,6 +631,8 @@ export class AlbumController {
     refresh: this.refresh, retry: this.retry, loadSettings: this.loadSettings,
     setSearch: this.setSearch, setMonth: this.setMonth, setWorld: this.setWorld,
     setFavorites: this.setFavorites, clearFilters: this.clearFilters,
+    setView: this.setView, openCollection: this.openCollection, setMemoryDate: this.setMemoryDate,
+    setMemoryRange: this.setMemoryRange, randomPhoto: this.randomPhoto,
     setGroup: this.setGroup, setBrowse: this.setBrowse, loadMore: this.loadMore,
     toggleSelectMode: this.toggleSelectMode, toggleSelected: this.toggleSelected,
     selectFiltered: this.selectFiltered, clearSelection: this.clearSelection,
@@ -599,27 +653,35 @@ export function useAlbum(options: AlbumOptions = {}) {
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   useEffect(() => {
     controller.start();
-    const visibility = () => { if (!document.hidden) controller.wake(); };
+    const visibility = () => { if (!document.hidden) { controller.syncToday(); controller.wake(); } };
+    const clock = setInterval(() => controller.syncToday(), 60_000);
     document.addEventListener('visibilitychange', visibility);
-    return () => { controller.dispose(); document.removeEventListener('visibilitychange', visibility); };
+    return () => { clearInterval(clock); controller.dispose(); document.removeEventListener('visibilitychange', visibility); };
   }, [controller]);
+  const scoped = useMemo(() => scopePhotos(state.photos, state), [state.photos, state.view, state.collection, state.memoryDate, state.memoryRange, state.today]);
+  const galleryGroup = scopeGroup(state);
   const filtered = useMemo(
-    () => orderPhotos(filterPhotos(state.photos, state.filters), state.group),
-    [state.photos, state.filters, state.group],
+    () => orderPhotos(filterPhotos(scoped, state.filters), galleryGroup),
+    [scoped, state.filters, galleryGroup],
   );
-  const groups = useMemo(() => groupPhotos(filtered, state.group, state.limit), [filtered, state.group, state.limit]);
+  const groups = useMemo(() => groupPhotos(filtered, galleryGroup, state.limit), [filtered, galleryGroup, state.limit]);
+  const collections = useMemo(() => buildCollections(state.photos, state.today), [state.photos, state.today]);
   const sidebar = useMemo(() => sidebarModel(state.photos), [state.photos]);
   const viewerId = state.viewer?.id;
   const viewerSnapshot = state.viewer?.photo;
   const currentViewerPhoto = useMemo(() => state.photos.find(photo => photo.id === viewerId) || null, [state.photos, viewerId]);
   const viewerPhoto = currentViewerPhoto || viewerSnapshot || null;
   const viewerMissing = !!viewerId && !currentViewerPhoto;
-  const viewerIndex = useMemo(() => filtered.findIndex(photo => photo.id === viewerId), [filtered, viewerId]);
+  const viewerOrder = useMemo(() => {
+    const available = new Set(state.photos.map(photo => photo.id));
+    return (state.viewer?.order || []).filter(id => available.has(id));
+  }, [state.photos, state.viewer?.order]);
+  const viewerIndex = viewerOrder.indexOf(viewerId || '');
   const sessionId = viewerPhoto?.session_id;
   const sessionCount = useMemo(() => sessionId ? state.photos.filter(photo => photo.session_id === sessionId).length : 0, [state.photos, sessionId]);
   return {
-    ...state, ...controller.actions, filtered, groups, sidebar,
-    viewerPhoto, viewerMissing, viewerIndex, sessionCount,
+    ...state, ...controller.actions, scoped, filtered, groups, sidebar, collections, galleryGroup,
+    viewerPhoto, viewerMissing, viewerIndex, viewerCount: viewerOrder.length, sessionCount,
     configured: state.catalog?.configured ?? state.settings?.configured ?? false,
     hasFilters: !!(state.filters.month || state.filters.world || state.filters.favorites || state.filters.search),
   };

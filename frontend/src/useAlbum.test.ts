@@ -50,6 +50,90 @@ afterEach(() => {
 });
 
 describe('typed album controller', () => {
+  it('selects only collection members across pagination and clears the selection when navigating to another scope', async () => {
+    const photos = Array.from({ length: 192 }, (_, index) => photo(`p${String(index).padStart(3, '0')}`, { tags: ['collection'] }));
+    const api = mockApi(catalog({ photos: [...photos, photo('outside')] }));
+    const album = controller(api);
+    await album.refresh();
+    album.openCollection({ title: '测试合集', description: '', rule: { kind: 'tag', value: 'collection' } });
+    album.toggleSelectMode(); album.selectFiltered();
+    expect(album.getSnapshot().selected.size).toBe(192);
+    expect(album.getSnapshot().selected.has('outside')).toBe(false);
+    album.setView('memories');
+    expect(album.getSnapshot().selected.size).toBe(0);
+    expect(album.getSnapshot().selectMode).toBe(false);
+    expect(album.getSnapshot().collection).toBeNull();
+  });
+
+  it('keeps the original collection viewer order after saving a tag that removes the current photo from the collection', async () => {
+    const api = mockApi(catalog({ photos: [photo('a', { tags: ['friends'] }), photo('b', { tags: ['friends'] }), photo('outside')] }));
+    const album = controller(api);
+    await album.refresh();
+    album.openCollection({ title: '朋友', description: '', rule: { kind: 'tag', value: 'friends' } });
+    album.openViewer('b');
+    expect(album.getSnapshot().viewer?.order).toEqual(['b', 'a']);
+    album.updateViewer({ tagsText: 'another' });
+    await album.moveViewer(1);
+    expect(album.getSnapshot().viewer?.id).toBe('a');
+    expect(album.getSnapshot().viewer?.order).toEqual(['b', 'a']);
+    expect(album.getSnapshot().photos.find(item => item.id === 'b')?.tags).toEqual(['another']);
+  });
+
+  it('uses only historical photos in the memory viewer and random picks can reach collection photos past the first page', async () => {
+    const api = mockApi(catalog({ photos: [photo('past', { date: '2025-10-03', captured_at: '2025-10-03T12:00:00' }), photo('now')] }));
+    const album = controller(api);
+    await album.refresh(); album.setView('memories'); album.setMemoryDate('2026-10-03');
+    album.openViewer('past');
+    expect(album.getSnapshot().viewer?.order).toEqual(['past']);
+    await album.closeViewer();
+    const many = Array.from({ length: 192 }, (_, index) => photo(`p${String(index).padStart(3, '0')}`, { tags: ['group'] }));
+    api.catalog.mockResolvedValue(catalog({ photos: [...many, photo('outside')] }));
+    await album.refresh();
+    album.openCollection({ title: '随机测试', description: '', rule: { kind: 'tag', value: 'group' } });
+    vi.spyOn(Math, 'random').mockReturnValue(0.9999);
+    album.randomPhoto();
+    expect(album.getSnapshot().viewer?.id).toBe('p000');
+    expect(album.getSnapshot().viewer?.order).toHaveLength(192);
+  });
+
+  it('protects dirty annotations and batch drafts when changing collection or memory scope', async () => {
+    const album = controller();
+    await album.refresh(); album.openViewer('a'); album.updateViewer({ note: 'keep me' });
+    expect(album.setView('memories')).toBe(false);
+    album.openCollection({ title: '其他合集', description: '', rule: { kind: 'favorites' } });
+    expect(album.getSnapshot().viewer?.fields.note).toBe('keep me');
+    expect(album.getSnapshot().view).toBe('photos');
+    await album.closeViewer(); album.openBatch(['a']);
+    const before = album.getSnapshot().memoryDate;
+    album.setMemoryDate('2024-01-01');
+    expect(album.getSnapshot().memoryDate).toBe(before);
+    expect(album.getSnapshot().batch?.ids).toEqual(['a']);
+  });
+
+  it('follows the local day while preserving a manually chosen anniversary and pauses rollover during editing', async () => {
+    const album = new AlbumController({ today: '2026-12-31' }, mockApi());
+    controllers.push(album);
+    album.setView('memories'); album.syncToday('2027-01-01');
+    expect(album.getSnapshot().memoryDate).toBe('2027-01-01');
+    album.setMemoryDate('2026-02-28'); album.syncToday('2027-01-02');
+    expect(album.getSnapshot().memoryDate).toBe('2026-02-28');
+    await album.refresh(); album.setView('photos'); album.openViewer('a');
+    album.syncToday('2027-01-03');
+    expect(album.getSnapshot().today).toBe('2027-01-02');
+    await album.closeViewer(); album.syncToday('2027-01-03');
+    expect(album.getSnapshot().today).toBe('2027-01-03');
+  });
+
+  it('resets discovery scopes after changing the photo source instead of retaining a stale collection', async () => {
+    const api = mockApi(); const album = controller(api);
+    await album.loadSettings(); await album.refresh();
+    album.openCollection({ title: '旧目录', description: '', rule: { kind: 'world', value: 'wrld_synthetic' } });
+    api.catalog.mockResolvedValue(catalog({ source_revision: 2, source: 'synthetic/other', photos: [photo('new')] }));
+    await album.refresh();
+    expect(album.getSnapshot().view).toBe('photos');
+    expect(album.getSnapshot().collection).toBeNull();
+    expect(album.getSnapshot().photos.map(item => item.id)).toEqual(['new']);
+  });
   it('preserves dirty viewer annotations when a background refresh updates the photo', async () => {
     const api = mockApi();
     const album = controller(api);

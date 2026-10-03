@@ -11,6 +11,7 @@ const paths = {
   left: <path d="m14 6-6 6 6 6"/>,
   right: <path d="m10 6 6 6-6 6"/>,
   check: <path d="m5 12 4 4 10-10"/>,
+  shuffle: <><path d="M3 6h3c4 0 6 12 10 12h5M3 18h3c1.5 0 2.8-1.7 4-4M14 8c.8-1.2 1.5-2 2-2h5M18 3l3 3-3 3M18 15l3 3-3 3"/></>,
   external: <><path d="M14 3h7v7M21 3l-11 11"/><path d="M10 3H3v18h18v-7"/></>,
   download: <><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></>,
   globe: <><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></>,
