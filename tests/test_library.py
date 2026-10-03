@@ -40,7 +40,25 @@ class CollectionsTests(FeatureTests):
         c = {'name': 'Bad rule', 'mode': 'rules', 'ids': [], 'rules': {'from': '2026-02-30'}}
         with self.assertRaises(ValueError):
             self.album.save_collection({'collection': c, 'source_revision': 0})
+
         self.assertEqual(self.album.collection_list(), [])
         c['rules'] = {'from': '2026-10-03', 'to': '2025-10-03'}
         with self.assertRaises(ValueError):
             self.album.save_collection({'collection': c, 'source_revision': 0})
+
+
+class SimilarTests(FeatureTests):
+    def test_similar_color_time_window_and_cached_readonly_scan(self):
+        self.image('VRChat_2026-10-03_12-00-00.1.png', '#800000')
+        self.image('VRChat_2026-10-03_12-00-01.2.png', '#900000')
+        self.image('VRChat_2026-10-03_12-00-02.3.png', 'blue')
+        self.image('VRChat_2026-10-03_12-10-00.4.png', '#980000')
+        self.album.scan()
+        before = self.state()
+        result = self.album.similar_groups()
+        self.assertEqual(result['checked'], 4)
+        self.assertEqual(len(result['groups']), 1)
+        self.assertEqual(len(result['groups'][0]), 2)
+        self.assertEqual(result, self.album.similar_groups())
+        self.assertEqual(self.album.db.execute('SELECT count(*) FROM visual_signatures').fetchone()[0], 4)
+        self.assertEqual(before, self.state())

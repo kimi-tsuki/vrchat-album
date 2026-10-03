@@ -603,6 +603,11 @@ class Handler(BaseHTTPRequestHandler):
         if route in ("/api/catalog", "/api/status"):
             state = self.album.status() if route == "/api/status" else self.album.catalog()
             self.respond(200, state)
+        elif route == "/api/similar":
+            try:
+                self.respond(200, self.album.similar_groups())
+            except ValueError as exc:
+                self.respond(400, {"error": str(exc)})
         elif route == "/api/settings":
             self.respond(200, self.album.settings())
         elif route == "/api/export":

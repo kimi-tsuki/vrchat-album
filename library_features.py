@@ -3,7 +3,8 @@ import json
 import os
 import re
 import uuid
-from datetime import date
+from datetime import date, datetime
+from PIL import Image, ImageStat
 
 
 class LibraryFeatures:
@@ -11,6 +12,69 @@ class LibraryFeatures:
         self.db.execute("""CREATE TABLE IF NOT EXISTS collections (
             source TEXT NOT NULL, id TEXT NOT NULL, revision INTEGER NOT NULL,
             document TEXT NOT NULL, PRIMARY KEY(source,id))""")
+        self.db.execute("CREATE TABLE IF NOT EXISTS visual_signatures (id TEXT PRIMARY KEY, hash TEXT NOT NULL, color TEXT NOT NULL)")
+
+    def similar_groups(self):
+        with self.lock:
+            catalog = self.catalog()
+            generation = self.source_revision
+            cached = {r['id']: (int(r['hash'], 16), json.loads(r['color'])) for r in self.db.execute('SELECT * FROM visual_signatures')}
+        photos = sorted(catalog['photos'], key=lambda p: (p['captured_at'], p['id']))
+        signatures = {}
+        for p in photos:
+            if self.stop_event.is_set():
+                raise ValueError('相册正在停止，请下次启动后再整理。')
+            signature = cached.get(p['id'])
+            if signature is None:
+                try:
+                    with Image.open(self.thumbs / (p['id'] + '.jpg')) as image:
+                        rgb = image.convert('RGB').resize((9, 8), Image.Resampling.LANCZOS)
+                        pixels = rgb.convert('L').tobytes()
+                        digest = 0
+                        for y in range(8):
+                            for x in range(8):
+                                digest = (digest << 1) | int(pixels[y * 9 + x] > pixels[y * 9 + x + 1])
+                        signature = (digest, ImageStat.Stat(rgb).mean)
+                    with self.lock:
+                        self.db.execute('INSERT OR REPLACE INTO visual_signatures VALUES(?,?,?)', (p['id'], format(signature[0], '016x'), json.dumps(signature[1])))
+                        self.db.commit()
+                except OSError:
+                    continue
+            signatures[p['id']] = signature
+        # Limit comparisons to nearby captures in the same world. No all-pairs scan.
+        buckets = {}
+        parent = {p['id']: p['id'] for p in photos}
+        sizes = {p['id']: 1 for p in photos}
+        def root(i):
+            while parent[i] != i:
+                parent[i] = parent[parent[i]]
+                i = parent[i]
+            return i
+        for p in photos:
+            sig = signatures.get(p['id'])
+            if sig is None:
+                continue
+            when = datetime.fromisoformat(p['captured_at'])
+            bucket = buckets.setdefault((p['date'], p['world_id'] or p['world']), [])
+            bucket[:] = [(q, t) for q, t in bucket[-32:] if (when - t).total_seconds() <= 120]
+            for q, _ in bucket:
+                other = signatures[q['id']]
+                ratio = (p['width'] / p['height']) / (q['width'] / q['height'])
+                if not 0.92 <= ratio <= 1.08 or (sig[0] ^ other[0]).bit_count() > 8 or max(abs(a-b) for a,b in zip(sig[1], other[1])) > 25:
+                    continue
+                a, b = root(p['id']), root(q['id'])
+                if a != b and sizes[a] + sizes[b] <= 24:
+                    parent[b] = a
+                    sizes[a] += sizes[b]
+            bucket.append((p, when))
+        groups = {}
+        for p in photos:
+            groups.setdefault(root(p['id']), []).append(p['id'])
+        with self.lock:
+            if generation != self.source_revision:
+                raise ValueError('照片目录已更换，请重新查找相似照片。')
+        return {'source_revision': generation, 'groups': [ids for ids in reversed(list(groups.values())) if len(ids) > 1],
+                'checked': len(signatures)}
 
     def collection_list(self):
         return [json.loads(row[0]) for row in self.db.execute(
