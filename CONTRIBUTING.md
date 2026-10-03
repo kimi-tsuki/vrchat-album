@@ -48,11 +48,23 @@ python3 install.py
 
 自动测试只使用生成的图片；界面预览也请使用独立数据目录，不改动真实相册标注。
 
-前端布局与偏好检查使用 Node.js 内置测试运行器，无需安装 npm 包；Node.js 仅用于开发验证，运行相册不需要它：
+### 前端开发
+
+前端位于 `frontend/`，使用 React 19、TypeScript、HeroUI 3 和 Tailwind CSS 4，通过 Vite 7 构建。开发前端需要 Node.js 20.19+ 或 22.12+，这是 [Vite 7 的版本要求](https://vite.dev/blog/announcing-vite7#node-js-support)。日常运行相册不需要 Node.js：仓库提交了 `web/dist/` 构建产物，Python 直接提供这些本地文件。
+
+在 `frontend/` 目录安装锁定的依赖、检查并构建：
 
 ```text
-node --test tests/test_appearance_preferences.cjs tests/test_gallery_layout.cjs
+cd frontend
+npm ci
+npm run typecheck
+npm test
+npm run build
 ```
+
+Windows PowerShell 如果限制运行 `npm.ps1`，使用对应的 `npm.cmd` 命令，例如 `npm.cmd ci`；不要修改执行策略。构建产物输出到 `web/dist/`，包含入口 HTML 和带内容哈希的脚本、样式。前端源码修改后，重新构建，并将新的构建文件与源码一起提交，保证下载 ZIP 后可直接运行。
+
+通过下面的 Python 命令在合成相册中验证实际构建界面，完整功能与最终验证以 Python 提供的页面为准。后台的 Host 和请求来源校验应保持不变。
 
 界面预览使用独立的合成照片和数据目录：
 
@@ -62,12 +74,22 @@ node --test tests/test_appearance_preferences.cjs tests/test_gallery_layout.cjs
 
 macOS / Linux 使用 `.venv/bin/python app.py` 和对应的测试目录。测试数据目录必须在照片目录之外。修改后按影响范围运行有意义的检查；后端逻辑或 HTTP 接口改动应运行自动测试，界面改动应检查实际操作和窄屏布局。通过后无需无理由重复测试。
 
+需要热更新时，先用上面的命令在 `18765` 端口启动合成测试相册，再打开另一个终端，在 `frontend/` 中运行：
+
+```powershell
+$env:ALBUM_API_PORT = '18765'
+npm.cmd run dev
+```
+
+macOS / Linux 使用 `ALBUM_API_PORT=18765 npm run dev`。打开 Vite 显示的 `http://127.0.0.1:5173` 地址；开发代理只连接指定的本机后台，并检查当前开发页面的请求来源。默认开发端口为 5173，占用时可通过 `ALBUM_DEV_PORT` 指定另一个端口。不要把开发代理指向真实相册数据进行测试；修改完成后仍需运行 `npm run build` 并在 Python 页面验证构建产物。
+
 ## 项目结构
 
 | 文件或目录 | 用途 |
 | --- | --- |
 | `app.py` | 照片索引、元数据读取、缩略图、本地 HTTP API |
-| `web/` | 无外部构建依赖的网页相册和使用指南 |
+| `frontend/` | React + TypeScript 相册、HeroUI 界面组件和前端检查 |
+| `web/dist/` | 随源码交付的 Vite 构建产物，运行时由 Python 提供 |
 | `install.py` | 创建本地虚拟环境并安装依赖 |
 | `bootstrap.py` | 检查项目 Python/Pillow，必要时安装，再启动相册 |
 | `打开相册.cmd` | Windows 可见的一键安装依赖与启动入口 |
@@ -85,6 +107,7 @@ macOS / Linux 使用 `.venv/bin/python app.py` 和对应的测试目录。测试
 - HTTP 服务启动后及时显示扫描进度，照片读取与缩略图生成不能阻塞首次欢迎页面。
 - 本地服务只监听 `127.0.0.1`，保留 Host 和编辑请求来源检查。
 - 配色与布局独立选择，切换外观不重置筛选、分页、选择或查看器顺序；相册与使用指南共用主题色和偏好读取。
+- 相册和使用指南的入口由同一套 React 界面提供；HTML 不缓存，带内容哈希的资源可长期缓存，升级后应加载新资源。
 - 普通、可见的 Python 启动方式。不要添加执行策略绕过脚本、隐藏启动或安全防护关闭步骤。
 - 不自动添加开机启动、照片云端上传或公网共享。
 - 不提交真实照片、预览截图、整理记录、日志、凭据或个人路径配置；检查 `.gitignore` 和待提交内容。
@@ -113,7 +136,7 @@ macOS / Linux 使用 `.venv/bin/python app.py` 和对应的测试目录。测试
 
 同一轮工作的多项修改合并为一个版本，以最高级别的变化决定升级幅度，不按文件数或提交次数反复升级。若存在并行 PR，版本号以最终合并顺序调整，避免重复占用版本。
 
-更新日志记录玩家能感知的变化、修复和兼容性事项。当前 `0.3.0` 新增可组合的配色与照片布局，按功能规模递增 minor；首个正式版本为 `0.1.0`。从 `0.1.x` 升级时，原自定义 `--source` 用户第一次仍应带原参数，确保旧索引来源归属正确；之后目录选择会保存。
+更新日志记录玩家能感知的变化、修复和兼容性事项。当前 `0.4.0` 将前端重构为 React + TypeScript 与 HeroUI，按模块重构规模递增 minor；首个正式版本为 `0.1.0`。从 `0.1.x` 升级时，原自定义 `--source` 用户第一次仍应带原参数，确保旧索引来源归属正确；之后目录选择会保存。
 
 ## 许可证
 

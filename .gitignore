@@ -1,5 +1,8 @@
 data/
 .venv/
+**/node_modules/
+frontend/.npm-cache/
+frontend/.vite/
 __pycache__/
 *.pyc
 tests/scratch/

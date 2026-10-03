@@ -568,7 +568,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", mime or mimetypes.guess_type(path.name)[0] or "application/octet-stream")
                 self.send_header("Content-Length", str(os.fstat(file.fileno()).st_size))
                 self.send_header("X-Content-Type-Options", "nosniff")
-                self.send_header("Cache-Control", "no-cache" if path.suffix == ".html" else "private, max-age=86400")
+                cache_control = "no-cache" if path.suffix == ".html" else "private, max-age=86400"
+                asset_root = (BASE / "web" / "dist" / "assets").resolve()
+                if path.suffix != ".html" and asset_root in path.resolve().parents and re.search(r"-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$", path.name):
+                    cache_control = "private, max-age=31536000, immutable"
+                self.send_header("Cache-Control", cache_control)
                 if path.suffix == ".html":
                     self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'")
                 self.end_headers()
@@ -578,6 +582,13 @@ class Handler(BaseHTTPRequestHandler):
             pass
         except FileNotFoundError:
             self.respond(404, {"error": "照片暂时不可用，正在等待下一次扫描。"})
+
+    def send_frontend(self):
+        entry = BASE / "web" / "dist" / "index.html"
+        if not entry.is_file():
+            self.respond(503, {"error": "缺少相册界面文件。请下载并解压完整的项目 ZIP；开发者请在 frontend 目录运行 npm ci 和 npm run build，再刷新页面。"})
+            return
+        self.send_file(entry, "text/html; charset=utf-8")
 
     def do_GET(self):
         if not self._valid_host():
@@ -606,8 +617,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_file(path)
             else:
                 self.respond(404, {"error": "照片不存在。"})
-        elif route in ("/", "/index.html"):
-            self.send_file(BASE / "web" / "index.html", "text/html; charset=utf-8")
+        elif route in ("/", "/index.html", "/guide", "/web/guide.html"):
+            self.send_frontend()
         elif route == "/favicon.ico":
             self.send_response(204)
             self.send_header("Content-Length", "0")

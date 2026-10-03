@@ -13,6 +13,7 @@ import sys
 import threading
 import time
 import unittest
+from unittest.mock import patch
 import uuid
 
 from PIL import Image
@@ -244,6 +245,15 @@ class AlbumTests(unittest.TestCase):
                     self.assertFalse(target.exists())
 
     def test_loopback_http_routes_and_host_origin_protection(self):
+        frontend = self.base / "web" / "dist"
+        assets = frontend / "assets"
+        assets.mkdir(parents=True)
+        entry = frontend / "index.html"
+        entry.write_text('<!doctype html><div id="root"></div>', encoding="utf-8")
+        (assets / "index-Abc123XY.js").write_text("export {};", encoding="utf-8")
+        base_patch = patch.object(backend, "BASE", self.base)
+        base_patch.start()
+        self.addCleanup(base_patch.stop)
         original = self.image("valid.png", "red")
         original_bytes = original.read_bytes()
         original_state = self.state()
@@ -269,9 +279,24 @@ class AlbumTests(unittest.TestCase):
                 connection.close()
 
         try:
-            status, headers, body = request("GET", "/")
+            for page in ("/", "/index.html", "/guide", "/web/guide.html"):
+                with self.subTest(page=page):
+                    status, headers, body = request("GET", page)
+                    self.assertEqual(status, 200)
+                    self.assertEqual(body, entry.read_bytes())
+                    self.assertEqual(headers["Cache-Control"], "no-cache")
+                    self.assertIn("connect-src 'self'", headers["Content-Security-Policy"])
+                    self.assertIn("frame-ancestors 'none'", headers["Content-Security-Policy"])
+            status, headers, body = request("GET", "/web/dist/assets/index-Abc123XY.js")
             self.assertEqual(status, 200)
-            self.assertIn("connect-src 'self'", headers["Content-Security-Policy"])
+            self.assertEqual(body, b"export {};")
+            self.assertIn("immutable", headers["Cache-Control"])
+            self.assertEqual(headers["X-Content-Type-Options"], "nosniff")
+            entry.rename(frontend / "index-unbuilt.html")
+            status, headers, body = request("GET", "/")
+            self.assertEqual(status, 503)
+            self.assertIn("npm run build", json.loads(body)["error"])
+            self.assertEqual(headers["Cache-Control"], "no-store")
             status, _, body = request("GET", "/api/catalog")
             self.assertEqual(status, 200)
             self.assertEqual(json.loads(body)["photos"][0]["id"], photo_id)

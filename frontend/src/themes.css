@@ -23,7 +23,7 @@
   --field-bg: #272521;
   --viewer-stage: #111110;
   --viewer-info: #1e1d1b;
-  --overlay: #0d0c0bec;
+  --album-backdrop: #0d0c0bec;
   --modal-overlay: #0d0c0bbb;
   --shadow: #0005;
   --success: #99b294;
@@ -54,7 +54,7 @@
   --field-bg: #f7f4ee;
   --viewer-stage: #e8e5de;
   --viewer-info: #fffdf8;
-  --overlay: #e8e5def5;
+  --album-backdrop: #e8e5def5;
   --modal-overlay: #292c296e;
   --shadow: #292c2933;
   --success: #4a7148;
@@ -85,7 +85,7 @@
   --field-bg: #14212e;
   --viewer-stage: #0b131d;
   --viewer-info: #14202d;
-  --overlay: #080f18f2;
+  --album-backdrop: #080f18f2;
   --modal-overlay: #080f18c4;
   --shadow: #0005;
   --success: #97c4b3;
