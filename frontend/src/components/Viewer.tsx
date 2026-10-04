@@ -6,6 +6,8 @@ import { Field } from './Field';
 import { Icon } from './Icon';
 import { useEntrance } from '../motion';
 import { clampPan, swipeDirection } from '../viewer-tools';
+import type { Photo } from '../types';
+import { PhotoEditor } from './PhotoEditor';
 
 export function DraftActions({ album }: { album: AlbumHook }) {
   if (!album.pendingSourceChange && !album.viewerMissing) return null;
@@ -43,14 +45,16 @@ export function Viewer({ album }: { album: AlbumHook }) {
   const [interval, setIntervalSeconds] = useState(5);
   const [imageReady, setImageReady] = useState(false);
   const [fullscreenError, setFullscreenError] = useState('');
+  // Keep the loaded editor open even if another window changes the source index.
+  const [editorPhoto, setEditorPhoto] = useState<Photo | null>(null);
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if(!photo || !imageReady || !viewer) return;
+    if(!photo || !imageReady || !viewer || editorPhoto) return;
     const neighbors=[album.viewerOrder[album.viewerIndex-1],album.viewerOrder[album.viewerIndex+1]];
     const images=neighbors.flatMap(id=>{const next=album.photos.find(p=>p.id===id);if(!next || next.width*next.height>16_000_000)return [];const image=new Image();image.decoding='async';image.src=next.original_url;return [image];});
     return()=>{for(const image of images)image.removeAttribute('src');};
-  },[photo?.id,imageReady,album.viewerIndex,album.viewerOrder,album.photos]);
-  const blocked = !viewer || viewer.dirty || viewer.saving || album.pendingSourceChange || album.viewerMissing || !!album.batch;
+  },[photo?.id,imageReady,album.viewerIndex,album.viewerOrder,album.photos,editorPhoto]);
+  const blocked = !viewer || viewer.dirty || viewer.saving || album.pendingSourceChange || album.viewerMissing || !!album.batch || !!editorPhoto;
   useEffect(() => { setImageReady(false); }, [photo?.id]);
   useEffect(() => {
     if (!viewer || blocked || album.viewerIndex >= album.viewerCount - 1) setPlaying(false);
@@ -69,7 +73,7 @@ export function Viewer({ album }: { album: AlbumHook }) {
     catch { setFullscreenError('浏览器未允许系统全屏，已进入沉浸模式。'); }
   };
   useEffect(() => {
-    if (!viewer || album.batch) return;
+    if (!viewer || album.batch || editorPhoto) return;
     function onKey(event: KeyboardEvent) {
       const target = event.target as HTMLElement;
       if (target.closest('input,textarea,[contenteditable="true"]')) return;
@@ -77,17 +81,17 @@ export function Viewer({ album }: { album: AlbumHook }) {
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [viewer, album.batch, album.moveViewer]);
-  return <Modal><Modal.Backdrop isOpen={!!viewer} onOpenChange={open => { if (!open) void album.closeViewer(); }} isDismissable={false} isKeyboardDismissDisabled={viewer?.saving || album.pendingSourceChange}>
+  }, [viewer, album.batch, album.moveViewer, editorPhoto]);
+  return <Modal><Modal.Backdrop isOpen={!!viewer || !!editorPhoto} onOpenChange={open => { if (!open && !editorPhoto) void album.closeViewer(); }} isDismissable={false} isKeyboardDismissDisabled={!!editorPhoto || viewer?.saving || album.pendingSourceChange}>
     <Modal.Container size="full" className="viewer-container"><Modal.Dialog aria-label="照片查看器" className={`viewer-dialog${immersive ? ' album-immersive' : ''}`}><div className="album-viewer-root" ref={root}>
-      {photo && viewer && <>
+      {editorPhoto ? <PhotoEditor key={editorPhoto.id} photo={editorPhoto} onClose={() => setEditorPhoto(null)} /> : photo && viewer && <>
         <header className="viewer-top"><div className="viewer-position"><strong>{album.viewerIndex >= 0 ? album.viewerIndex + 1 : '—'}</strong> / {album.viewerCount} <span> · {worldName(photo)}</span></div><div className="viewer-top-actions">
           <Button isIconOnly variant="ghost" aria-label="上一张照片" onPress={() => { void album.moveViewer(-1); }} isDisabled={album.viewerIndex <= 0 || viewer.saving || album.pendingSourceChange}><Icon name="left" /></Button>
           <Button isIconOnly variant="ghost" aria-label="下一张照片" onPress={() => { void album.moveViewer(1); }} isDisabled={album.viewerIndex < 0 || album.viewerIndex >= album.viewerCount - 1 || viewer.saving || album.pendingSourceChange}><Icon name="right" /></Button>
           <Button isIconOnly variant="ghost" className="viewer-favorite" aria-label={photo.favorite ? '取消星标' : '添加星标'} aria-pressed={photo.favorite} onPress={() => { void album.toggleFavorite(photo.id); }} isDisabled={album.pendingSourceChange}><Icon key={String(photo.favorite)} name="star" style={photo.favorite ? { fill: 'currentColor', color: 'var(--accent)' } : undefined} /></Button>
           <Button isIconOnly variant="ghost" aria-label="关闭照片查看器" isDisabled={viewer.saving || album.pendingSourceChange} onPress={() => { void album.closeViewer(); }}><Icon name="close" /></Button>
         </div></header>
-        <div className="album-viewer-tools"><Button size="sm" variant="secondary" onPress={() => { setImmersive(!immersive); setPlaying(false); }}>{immersive ? '显示整理面板' : '沉浸看图'}</Button><Button size="sm" variant="ghost" onPress={() => { void fullscreen(); }}>全屏</Button><Button size="sm" variant="secondary" isDisabled={blocked || album.viewerIndex >= album.viewerCount - 1} onPress={() => { setImmersive(true); setPlaying(!playing); }}>{playing ? '暂停播放' : '自动播放'}</Button><label>间隔 <select aria-label="幻灯片播放间隔" value={interval} onChange={event => setIntervalSeconds(Number(event.target.value))}><option value={3}>3 秒</option><option value={5}>5 秒</option><option value={10}>10 秒</option><option value={15}>15 秒</option></select></label><span role="status">{fullscreenError || (viewer.dirty ? '先保存标注再播放' : '双击缩放 · 放大后拖动 · 触屏左右滑动')}</span></div>
+        <div className="album-viewer-tools"><Button size="sm" onPress={() => { setPlaying(false); if (document.fullscreenElement) void document.exitFullscreen().catch(() => {}); setEditorPhoto({...photo}); }} isDisabled={viewer.saving || album.pendingSourceChange || album.viewerMissing || !album.indexComplete}><Icon name="edit" />编辑并导出</Button><Button size="sm" variant="secondary" onPress={() => { setImmersive(!immersive); setPlaying(false); }}>{immersive ? '显示整理面板' : '沉浸看图'}</Button><Button size="sm" variant="ghost" onPress={() => { void fullscreen(); }}>全屏</Button><Button size="sm" variant="secondary" isDisabled={blocked || album.viewerIndex >= album.viewerCount - 1} onPress={() => { setImmersive(true); setPlaying(!playing); }}>{playing ? '暂停播放' : '自动播放'}</Button><label>间隔 <select aria-label="幻灯片播放间隔" value={interval} onChange={event => setIntervalSeconds(Number(event.target.value))}><option value={3}>3 秒</option><option value={5}>5 秒</option><option value={10}>10 秒</option><option value={15}>15 秒</option></select></label><span role="status">{fullscreenError || (viewer.dirty ? '先保存标注再播放' : '双击缩放 · 放大后拖动 · 触屏左右滑动')}</span></div>
         <div className="viewer-body"><div className="viewer-stage"><OriginalImage key={photo.id} url={photo.original_url} alt={photo.world || photo.filename} onReady={setImageReady} onMove={direction => { setPlaying(false); void album.moveViewer(direction); }} /></div>
           <aside className="viewer-side"><div className="viewer-photo-meta" key={photo.id}><p className="eyebrow">这一刻的回忆</p><h2>{dateText(photo.date)}</h2><div className="viewer-meta">{timeText(photo)} · {photo.width} × {photo.height} · {photo.session_label}</div><p className="viewer-file">{photo.filename}</p></div>
             <form onSubmit={event => { event.preventDefault(); void album.saveViewer(); }}><div className="field-stack"><Field label="世界名称" value={viewer.fields.world} onChange={world => album.updateViewer({ world })} placeholder="为这次漫游取一个名字" maxLength={200} isDisabled={viewer.saving} />
