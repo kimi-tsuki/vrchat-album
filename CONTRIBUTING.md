@@ -95,6 +95,7 @@ macOS / Linux 使用 `ALBUM_API_PORT=18765 npm run dev`。打开 Vite 显示的 
 | `打开相册.cmd` | Windows 可见的一键安装依赖与启动入口 |
 | `tests/` | 基于合成图片的自动测试 |
 | `VERSION`、`CHANGELOG.md` | 当前版本与更新记录 |
+| `docs/` | 完整使用手册与 README 的原创 SVG 封面 |
 | `data/` | 运行时生成的数据，始终保持 Git 忽略 |
 
 ## 需要保留的行为

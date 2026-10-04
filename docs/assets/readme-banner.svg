@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-labelledby="title description">
+  <title id="title">让漫游，变成珍藏。</title>
+  <desc id="description">VRChat 本地相册的原创封面插画。深色背景上叠放着山峦、星空和森林的照片卡片，表达按世界与时间收藏回忆；没有使用真实照片。</desc>
+  <defs>
+    <linearGradient id="background" x2="1" y2="1"><stop stop-color="#191c20"/><stop offset="1" stop-color="#252b32"/></linearGradient>
+    <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#41436b"/><stop offset="1" stop-color="#88939d"/></linearGradient>
+    <linearGradient id="forest" x2="0" y2="1"><stop stop-color="#546c65"/><stop offset="1" stop-color="#b3bbaa"/></linearGradient>
+    <clipPath id="front"><rect x="748" y="99" width="320" height="180" rx="6"/></clipPath>
+    <clipPath id="back"><rect x="836" y="39" width="284" height="160" rx="6"/></clipPath>
+  </defs>
+  <rect width="1200" height="340" rx="20" fill="url(#background)"/>
+  <path d="M617 340C699 187 678 104 812 0M680 340C755 191 731 111 883 0M748 340C818 215 795 112 961 0" fill="none" stroke="#efad7820" stroke-width="1"/>
+  <circle cx="1103" cy="278" r="126" fill="none" stroke="#efad7817"/>
+  <circle cx="1103" cy="278" r="157" fill="none" stroke="#efad7812"/>
+  <g font-family="Segoe UI, Microsoft YaHei, Noto Sans CJK SC, sans-serif">
+    <g transform="translate(56 42)" fill="none" stroke="#e9ac7e" stroke-width="2.1" stroke-linejoin="round">
+      <rect width="25" height="25" rx="6"/><path d="m3 19 6-7 5 5 3-4 5 6"/><circle cx="17" cy="7" r="1.5"/>
+    </g>
+    <text x="96" y="60" font-size="13" letter-spacing="3" fill="#e9ac7e">VRCHAT / MEMORIES</text>
+    <text x="56" y="150" font-size="46" font-weight="600" fill="#f4eee6">让漫游，变成珍藏。</text>
+    <text x="58" y="192" font-size="18" fill="#aeb5be">把世界与时间，收进自己的相册。</text>
+    <g font-size="12" fill="#d4d7db">
+      <rect x="56" y="246" width="97" height="30" rx="15" fill="#ffffff07" stroke="#ffffff20"/><text x="77" y="266">原照片只读</text>
+      <rect x="165" y="246" width="97" height="30" rx="15" fill="#ffffff07" stroke="#ffffff20"/><text x="186" y="266">本机整理</text>
+      <rect x="274" y="246" width="97" height="30" rx="15" fill="#ffffff07" stroke="#ffffff20"/><text x="295" y="266">自由回看</text>
+    </g>
+  </g>
+  <g transform="rotate(8 976 130)">
+    <rect x="824" y="27" width="308" height="218" rx="11" fill="#121519" opacity=".45" transform="translate(4 9)"/>
+    <rect x="824" y="27" width="308" height="218" rx="11" fill="#ddd8cf"/>
+    <g clip-path="url(#back)">
+      <rect x="836" y="39" width="284" height="160" fill="url(#forest)"/>
+      <circle cx="1058" cy="80" r="22" fill="#e9d4a4"/>
+      <path d="m828 161 39-70 37 70 38-91 50 91 36-63 33 63 34-87 45 87v45H828Z" fill="#344c48"/>
+      <path d="M830 174q77-21 134 0t170-8v41H830Z" fill="#253d3d"/>
+    </g>
+    <path d="M838 220h77" stroke="#9a9a90" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="1111" cy="220" r="3" fill="#899184"/>
+  </g>
+  <g transform="rotate(-5 908 201)">
+    <rect x="736" y="87" width="344" height="234" rx="11" fill="#0c0f15" opacity=".45" transform="translate(5 9)"/>
+    <rect x="736" y="87" width="344" height="234" rx="11" fill="#eee8df"/>
+    <g clip-path="url(#front)">
+      <rect x="748" y="99" width="320" height="180" fill="url(#sky)"/>
+      <circle cx="969" cy="146" r="23" fill="#e6bd95"/>
+      <g fill="#e4e2d9"><circle cx="781" cy="125" r="1.4"/><circle cx="835" cy="140" r="1"/><circle cx="898" cy="117" r="1.2"/><circle cx="1028" cy="137" r="1.3"/></g>
+      <path d="m739 247 81-93 91 101 63-70 99 78v33H739Z" fill="#656880"/>
+      <path d="m738 266 111-86 85 91 69-59 87 55v32H738Z" fill="#343f56"/>
+      <path d="M899 279q-24-22-5-43t-1-33" fill="none" stroke="#c3a48b" stroke-width="3" stroke-linecap="round"/>
+    </g>
+    <path d="M750 301h96" stroke="#a49b8f" stroke-width="3" stroke-linecap="round"/>
+    <path d="m1044 293 2.1 4.2 4.7.7-3.4 3.3.8 4.6-4.2-2.2-4.2 2.2.8-4.6-3.4-3.3 4.7-.7Z" fill="#c98958"/>
+  </g>
+</svg>
