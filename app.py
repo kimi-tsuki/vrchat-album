@@ -449,6 +449,7 @@ class Album(LibraryFeatures):
             records = {row["id"]: dict(row) for row in self.db.execute("SELECT * FROM photos WHERE id IN (SELECT id FROM files WHERE source=?)", (key,))}
             state = self._state()
             state["custom_collections"] = self.collection_list()
+            state["collection_displays"] = self.collection_displays()
         photos = {}
         for file in files:
             digest = file["id"]
@@ -601,6 +602,22 @@ class Handler(BaseHTTPRequestHandler):
                 self.respond(200, self.album.similar_groups())
             except ValueError as exc:
                 self.respond(400, {"error": str(exc)})
+        elif route == "/api/collections/cover":
+            try:
+                query = parse_qs(urlparse(self.path).query)
+                content = self.album.collection_cover(query.get('id', [''])[0], int(query.get('revision', ['-1'])[0]), int(query.get('source_revision', ['-1'])[0]))
+            except ValueError:
+                content = None
+            if content:
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Content-Length", str(len(content)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.end_headers()
+                self.wfile.write(content)
+            else:
+                self.respond(404, {"error": "封面不可用，请刷新合集。"})
         elif route == "/api/settings":
             self.respond(200, self.album.settings())
         elif route == "/api/export":
@@ -647,7 +664,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             route = urlparse(self.path).path
             length = int(self.headers.get("Content-Length", "0"))
-            if not 0 <= length <= (16 * 1024 * 1024 if route in ("/api/import/preview", "/api/import/apply") else 1024 * 1024):
+            if not 0 <= length <= (16 * 1024 * 1024 if route in ("/api/import/preview", "/api/import/apply", "/api/collections/display") else 1024 * 1024):
                 raise ValueError("请求太大。")
             body = json.loads(self.rfile.read(length) or b"{}")
             route = urlparse(self.path).path
@@ -673,6 +690,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.respond(200, self.album.import_annotations(body, apply=route.endswith("/apply")))
             elif route == "/api/collections/save":
                 self.respond(200, {"collection": self.album.save_collection(body)})
+            elif route == "/api/collections/display":
+                self.respond(200, {"display": self.album.save_collection_display(body)})
             elif route == "/api/scan":
                 self.album.scan_event.set()
                 self.respond(202, {"ok": True})

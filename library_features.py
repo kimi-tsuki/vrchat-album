@@ -5,6 +5,7 @@ import re
 import uuid
 from datetime import date, datetime
 from PIL import Image, ImageStat
+from collection_display import CollectionDisplays
 
 
 class CatalogChanged(ValueError):
@@ -31,8 +32,9 @@ def annotation_values(changes):
     return result
 
 
-class LibraryFeatures:
+class LibraryFeatures(CollectionDisplays):
     def initialize_library(self):
+        self.initialize_collection_displays()
         self._page_cache = None
         self.db.execute("""CREATE TABLE IF NOT EXISTS collections (
             source TEXT NOT NULL, id TEXT NOT NULL, revision INTEGER NOT NULL,

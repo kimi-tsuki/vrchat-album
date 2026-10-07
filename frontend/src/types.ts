@@ -8,6 +8,12 @@ export type CollectionRule =
   | { kind: 'session' | 'world' | 'tag' | 'year'; value: string };
 export interface CollectionSelection { rule: CollectionRule; title: string; description: string }
 
+export interface CollectionDisplay {
+  id: string; revision: number; pinned: boolean; pinned_order: number;
+  slideshow: boolean; interval: 5 | 8 | 12; position: 25 | 50 | 75;
+  cover_type: 'auto' | 'photo' | 'upload'; cover_photo: string; cover_url?: string;
+}
+
 export interface CustomCollection {
   id: string; revision: number; name: string; mode: 'manual' | 'rules'; ids: string[]; cover: string;
   rules: { from: string; to: string; world: string; tags: string[]; favorites: boolean };
@@ -62,6 +68,7 @@ export interface AlbumCatalog extends AlbumStatus {
   index_complete?: boolean;
   total_photos?: number;
   custom_collections?: CustomCollection[];
+  collection_displays?: Record<string, CollectionDisplay>;
   photos: Photo[];
 }
 

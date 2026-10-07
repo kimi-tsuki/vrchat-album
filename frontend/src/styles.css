@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "@heroui/styles";
 @import "./themes.css";
+@import "./collection-display.css";
 
 :root {
   --background: var(--bg); --foreground: var(--text);

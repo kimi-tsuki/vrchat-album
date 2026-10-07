@@ -1,6 +1,10 @@
 import type { SVGProps } from 'react';
 
 const paths = {
+  pin: <><path d="m9 3 6 0-1 6 4 4v2H6v-2l4-4Z"/><path d="M12 15v6"/></>,
+  settings: <><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></>,
+  play: <path d="m9 5 11 7-11 7Z"/>,
+  pause: <><path d="M8 5v14M16 5v14"/></>,
   album: <><rect x="3" y="3" width="18" height="18" rx="5"/><path d="m4 16 5-5 4 4 3-3 5 5"/><circle cx="15.5" cy="8" r="1"/></>,
   star: <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/>,
   folder: <path d="M3 7V5h6l2 2h10v12H3Z"/>,

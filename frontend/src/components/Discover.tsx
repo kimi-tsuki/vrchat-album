@@ -2,9 +2,13 @@ import { Button, Input, Label, Tabs, TextField } from '@heroui/react';
 import { useMemo, useRef, useState } from 'react';
 import { shiftDate, type SmartCollection } from '../collections';
 import type { AlbumHook } from '../useAlbum';
-import type { MemoryRange } from '../types';
+import type { MemoryRange, CustomCollection } from '../types';
 import { Icon } from './Icon';
 import { useEntrance } from '../motion';
+import { collectionFrames, defaultDisplay, orderCollections } from '../collection-display';
+import { request } from '../api';
+import { CollectionPoster } from './CollectionPoster';
+import { CollectionSettings } from './CollectionSettings';
 
 export function MemoryControls({ album }: { album: AlbumHook }) {
   const years = new Set(album.scoped.map(photo => photo.date.slice(0, 4)));
@@ -23,28 +27,51 @@ export function MemoryControls({ album }: { album: AlbumHook }) {
 
 const categories = ['全部', '自定义', '推荐', '世界', '标签', '年份'] as const;
 type Category = typeof categories[number];
-export function Collections({ album }: { album: AlbumHook }) {
+export function Collections({ album, onEdit, onCreate }: { album: AlbumHook; onEdit(collection: CustomCollection): void; onCreate(): void }) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<Category>('全部');
   const [limit, setLimit] = useState(12);
+  const [settings, setSettings] = useState<SmartCollection | null>(null);
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
+  const displays = album.catalog?.collection_displays;
   const visible = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
-    return album.collections.filter(collection => (category === '全部' || collection.category === category) &&
-      (!needle || `${collection.title} ${collection.description}`.toLocaleLowerCase().includes(needle)));
-  }, [album.collections, category, query]);
+    return orderCollections(album.collections.filter(collection => (category === '全部' || collection.category === category) &&
+      (!needle || `${collection.title} ${collection.description}`.toLocaleLowerCase().includes(needle))), displays);
+  }, [album.collections, displays, category, query]);
   const gridRef = useRef<HTMLDivElement>(null);
-  useEntrance(gridRef, `${category}:${query}:${limit}:${visible.map(collection => collection.id).join(',')}`, '.collection-card');
-  const open = (collection: SmartCollection) => album.openCollection(collection);
-  return <section className="collections-section" aria-label="自动合集列表">
-    <div className="discovery-heading"><div><p className="eyebrow">STORIES ALREADY IN YOUR ALBUM</p><h2>不用搬动照片，也能汇成一册</h2><p>根据日期、世界、标签和星标自动整理。新照片与标注保存后，合集会跟着更新。</p></div><span className="memory-count">{album.collections.length} 个合集</span></div>
+  useEntrance(gridRef, `${category}:${query}:${limit}:${visible.map(collection => collection.id).join(',')}`, '.collection-poster');
+  const pin = async (collection: SmartCollection) => {
+    setBusy(collection.id); setError('');
+    const display = displays?.[collection.id] || defaultDisplay(collection.id);
+    try {
+      await request('/api/collections/display', { display: { ...display, pinned: !display.pinned }, source_revision: album.catalog?.source_revision });
+      await album.refresh();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : '置顶设置保存失败。'); }
+    finally { setBusy(''); }
+  };
+  const shown = visible.slice(0, limit);
+  const featured = shown.filter(c => displays?.[c.id]?.pinned);
+  const regular = shown.filter(c => !displays?.[c.id]?.pinned);
+  const poster = (collection: SmartCollection) => {
+    const display = displays?.[collection.id] || defaultDisplay(collection.id);
+    return <CollectionPoster key={`${collection.id}:${display.revision}`} collection={collection} display={display}
+      frames={collectionFrames(collection, display, album.photos, album.today)} busy={!!busy || album.pendingSourceChange || !album.indexComplete}
+      onOpen={() => album.openCollection(collection)} onSettings={() => setSettings(collection)} onPin={() => { void pin(collection); }} />;
+  };
+  return <section className="collections-section" aria-label="合集列表">
+    <div className="discovery-heading collection-heading"><div><p className="eyebrow">YOUR PERSONAL EXHIBITION</p><h2>让喜欢的回忆，占据整个画面</h2><p>置顶一册，让它成为主角。点卡片右上角，定制封面与幻灯片。</p></div><Button variant="secondary" onPress={onCreate}>＋ 新建合集</Button></div>
     <div className="collections-toolbar"><Tabs selectedKey={category} onSelectionChange={key => { setCategory(String(key) as Category); setLimit(12); }}><Tabs.ListContainer><Tabs.List aria-label="合集分类">{categories.map(value => <Tabs.Tab id={value} key={value}>{value}<Tabs.Indicator /></Tabs.Tab>)}</Tabs.List></Tabs.ListContainer></Tabs>
       <TextField aria-label="搜索合集" value={query} onChange={value => { setQuery(value); setLimit(12); }} className="collection-search"><Input placeholder="搜索世界、标签或年份…" /></TextField></div>
-    <div ref={gridRef} className="collection-grid">{visible.slice(0, limit).map(collection => <Button key={collection.id} variant="ghost" className="collection-card" aria-label={`打开合集 ${collection.title}，${collection.count} 张`} onPress={() => open(collection)}>
-      <span className={`collection-covers covers-${collection.covers.length}`} aria-hidden="true">{collection.covers.map(photo => <img key={photo.id} src={photo.thumb_url} alt="" loading="lazy" decoding="async" />)}<span className="collection-category">{collection.category}</span></span>
-      <span className="collection-copy"><span className="collection-title">{collection.title}</span><span className="collection-description">{collection.description}</span><span className="collection-meta"><span>{collection.count.toLocaleString()} 张照片</span>{collection.favorites > 0 && <span><Icon name="star" />{collection.favorites} 张星标</span>}<Icon name="right" /></span></span>
-    </Button>)}</div>
+    {error && <p className="form-message error" role="alert">{error}</p>}
+    <div ref={gridRef}>
+      {!!featured.length && <div className="collection-featured" aria-label="置顶合集"><div className="collection-section-label"><span>精选置顶</span><small>FEATURED STORIES</small></div>{featured.map(poster)}</div>}
+      {!!regular.length && <><div className="collection-section-label"><span>{featured.length ? '继续探索' : '我的合集'}</span><small>{visible.length} COLLECTIONS</small></div><div className="collection-gallery">{regular.map(poster)}</div></>}
+    </div>
     {!visible.length && <div className="empty"><Icon name="folder" /><h3>{album.photos.length ? '没有匹配的合集' : '照片整理后，合集会出现在这里'}</h3><p>{album.photos.length ? '换个关键词或分类，看看其他回忆。' : '先在相册选择照片目录，再回来看看。'}</p>{album.photos.length > 0 && <Button variant="secondary" onPress={() => { setQuery(''); setCategory('全部'); setLimit(12); }}>显示全部合集</Button>}</div>}
     {visible.length > limit && <div className="load-more"><Button variant="secondary" onPress={() => setLimit(value => value + 12)}>更多合集 · 还有 {visible.length - limit} 个</Button></div>}
-    <p className="discovery-hint">合集按现有记录自动分组，无需联网。给照片加同一个标签，就能得到自己的主题合集。</p>
+    <p className="discovery-hint">合集与封面保存在本机。新照片与标注保存后，自动合集会跟着更新。</p>
+    {settings && <CollectionSettings album={album} collection={settings} onClose={() => setSettings(null)} onEdit={collection => { setSettings(null); onEdit(collection); }} />}
   </section>;
 }
